@@ -31,8 +31,8 @@ jobs:
       with:
         name: "TREM.Windows_x64.exe"
         path: |
-          D:/a/TREM-Lite/TREM-Lite/dev/*.exe
-          D:/a/TREM-Lite/TREM-Lite/dev/*.msi
+          D:/a/TREM-Lite/TREM-Lite/dist/*.exe
+          D:/a/TREM-Lite/TREM-Lite/dist/*.msi
 
   Linux_amd64:
     runs-on: ubuntu-latest
@@ -58,9 +58,9 @@ jobs:
       with:
         name: "TREM.Linux_amd64.deb"
         path: |
-          /home/runner/work/TREM-Lite/TREM-Lite/dev/*.deb
-          /home/runner/work/TREM-Lite/TREM-Lite/dev/*.AppImage
-          /home/runner/work/TREM-Lite/TREM-Lite/dev/*.rpm
+          /home/runner/work/TREM-Lite/TREM-Lite/dist/*.deb
+          /home/runner/work/TREM-Lite/TREM-Lite/dist/*.AppImage
+          /home/runner/work/TREM-Lite/TREM-Lite/dist/*.rpm
 
   macOS_x64:
     runs-on: macos-13
@@ -86,8 +86,8 @@ jobs:
       with:
         name: "TREM.macOS_x64.dmg"
         path: |
-          /Users/runner/work/TREM-Lite/TREM-Lite/dev/*.dmg
-          /Users/runner/work/TREM-Lite/TREM-Lite/dev/*.pkg
+          /Users/runner/work/TREM-Lite/TREM-Lite/dist/*.dmg
+          /Users/runner/work/TREM-Lite/TREM-Lite/dist/*.pkg
   macOS_arm64:
     runs-on: macos-14
     defaults:
@@ -112,5 +112,5 @@ jobs:
       with:
         name: "TREM.macOS_arm64.dmg"
         path: |
-          /Users/runner/work/TREM-Lite/TREM-Lite/dev/*.dmg
-          /Users/runner/work/TREM-Lite/TREM-Lite/dev/*.pkg
+          /Users/runner/work/TREM-Lite/TREM-Lite/dist/*.dmg
+          /Users/runner/work/TREM-Lite/TREM-Lite/dist/*.pkg
