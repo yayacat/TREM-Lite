@@ -24,8 +24,8 @@ jobs:
     #   run: npm run lint
     - name: Build
       run: npm run build
-      env:
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      # env:
+      #   GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
@@ -51,8 +51,8 @@ jobs:
     #   run: npm run lint
     - name: Build
       run: npm run build
-      env:
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      # env:
+      #   GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
@@ -79,8 +79,8 @@ jobs:
     #   run: npm run lint
     - name: Build
       run: npm run build
-      env:
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      # env:
+      #   GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
@@ -105,8 +105,8 @@ jobs:
     #   run: npm run lint
     - name: Build
       run: npm run build
-      env:
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      # env:
+      #   GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
