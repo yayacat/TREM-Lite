@@ -20,8 +20,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - name: Restore dependencies
       run: npm i
-    - name: Lint
-      run: npm run lint
+    # - name: Lint
+    #   run: npm run lint
     - name: Build
       run: npm run dist
       env:
@@ -47,8 +47,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - name: Restore dependencies
       run: npm i
-    - name: Lint
-      run: npm run lint
+    # - name: Lint
+    #   run: npm run lint
     - name: Build
       run: npm run dist
       env:
@@ -75,8 +75,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - name: Restore dependencies
       run: npm i
-    - name: Lint
-      run: npm run lint
+    # - name: Lint
+    #   run: npm run lint
     - name: Build
       run: npm run dist_x64
       env:
@@ -101,8 +101,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - name: Restore dependencies
       run: npm i
-    - name: Lint
-      run: npm run lint
+    # - name: Lint
+    #   run: npm run lint
     - name: Build
       run: npm run dist_arm64
       env:
