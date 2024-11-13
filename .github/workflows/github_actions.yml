@@ -23,7 +23,7 @@ jobs:
     # - name: Lint
     #   run: npm run lint
     - name: Build
-      run: npm run dist
+      run: npm run build
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
@@ -50,7 +50,7 @@ jobs:
     # - name: Lint
     #   run: npm run lint
     - name: Build
-      run: npm run dist
+      run: npm run build
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
@@ -78,7 +78,7 @@ jobs:
     # - name: Lint
     #   run: npm run lint
     - name: Build
-      run: npm run dist_x64
+      run: npm run build
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
@@ -104,7 +104,7 @@ jobs:
     # - name: Lint
     #   run: npm run lint
     - name: Build
-      run: npm run dist_arm64
+      run: npm run build
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
     - name: Upload Artifact
