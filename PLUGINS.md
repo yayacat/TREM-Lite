@@ -230,6 +230,25 @@ ipcRenderer.send("broadcast-to-plugin-windows", { pluginId: "my-panel", channel:
 
 兩邊都還有後路：主視窗送出的未知通道會轉給該擴充功能自己的視窗，頁面送出的未知通道則以 `plugin-window-message` 交給主視窗的擴充功能。
 
+## 導覽列按鈕
+
+要在左下角的按鈕列加一顆自己的按鈕，舊版的做法是插在 `#focus` 後面：
+
+```js
+const focusButton = document.querySelector("#focus");
+if (focusButton) {
+  const button = document.createElement("div");
+  button.id = "my-button";
+  button.className = "nav-bar-location";
+  button.title = "我的面板";
+  button.innerHTML = "<svg …></svg>";
+  focusButton.insertAdjacentElement("afterend", button);
+  button.addEventListener("click", () => ipcRenderer.send("open-plugin-window", { … }));
+}
+```
+
+`#setting` 與 `#focus` 這兩個 id 在 V4 保留著就是為了這個（舊版的 `legacy/src/view/index.html` 也是這樣寫的），`.nav-bar-location` 的樣式也在，插進去的按鈕會和旁邊的按鈕長得一樣。`onLoad()` 執行時畫面已經在了，不需要自己等 DOM。
+
 ## 相依性
 
 ```json

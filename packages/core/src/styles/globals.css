@@ -1152,6 +1152,37 @@
   }
 }
 
+/* The nav button classes of TREM-Lite 3, kept because extensions inject their
+   own buttons into that row: weather and websocket look up `#focus` and insert
+   a sibling carrying `nav-bar-location`, exactly as legacy/src/view/index.html
+   laid it out. Styling the class here is what makes an injected button sit in
+   the row like one of ours instead of a bare 24px icon. The geometry is
+   nav_bar/box.css; the colours match the React buttons next to it. */
+.nav-bar-location,
+.nav-bar-setting {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 3px;
+  border: 1px solid #00000008;
+  border-radius: 5px;
+  background: var(--panel-bg);
+  color: var(--light);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.nav-bar-location:hover,
+.nav-bar-setting:hover {
+  border: 1px solid #ffffff47;
+  background-color: #252424c7;
+}
+
 /* Status lights right of the clock (overlays/TimeBar.tsx): small, unboxed and
    dim so they stay out of the way — green and slowly breathing when a realtime
    stream works; red, and fully lit, when it does not; grey while a replay has
