@@ -1742,16 +1742,69 @@
   border-color: #ffc86155;
 }
 
-.settings-extension-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 62%;
-  text-align: right;
+/* One extension per row, and its facts unfold inside that row: the head is the
+   button, so the name reads as the thing that opens them. */
+.settings-extension + .settings-extension {
+  border-top: 1px solid #ffffff0d;
 }
 
-.settings-extension-detail p {
+.settings-row > .settings-extension-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-row > .settings-extension-head:hover {
+  color: #fff;
+  /* The row's generic button hover would draw a pill around a button that is
+     only text and a chevron. */
+  background: none;
+}
+
+.settings-extension-head svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: #8b8b94;
+  transition: transform 0.15s ease;
+}
+
+.settings-extension-head[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.settings-extension-version {
+  color: #8b8b94;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* Indented to the name, not to the row edge, so the folded facts read as part
+   of the extension above them. */
+.settings-extension-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 16px 14px 39px;
+  color: #d7d7de;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.settings-extension-body p {
   margin: 0;
+}
+
+.settings-extension-description {
+  max-width: 72ch;
 }
 
 .settings-error {

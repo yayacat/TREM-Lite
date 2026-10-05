@@ -12,7 +12,7 @@
  * other four; the two components are private to that file, and copying three
  * lines of JSX beats exporting them across an import cycle.
  */
-import { FolderOpen, Puzzle, Trash2 } from "lucide-react";
+import { ChevronRight, FolderOpen, Puzzle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { authorNames, localizedText, pluginLoader, pluginStorageAvailable } from "../plugin";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -34,6 +34,10 @@ export function ExtensionsTab() {
   const [countdown, setCountdown] = useState<{ name: string; left: number } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  // Which rows are unfolded. The details belong to the extension they describe,
+  // so they live inside its row instead of in a second list further down, where
+  // two extensions' facts were only told apart by the name on the left.
+  const [open, setOpen] = useState<string[]>([]);
 
   useEffect(() => {
     if (!loader) return;
@@ -108,98 +112,121 @@ export function ExtensionsTab() {
             </button>
           </Line>
         ) : (
-          entries.map((entry) => (
-            <Line key={entry.name} label={`${entry.info.name} ${entry.info.version ?? ""}`}>
-              <div className="settings-actions">
-                {entry.loaded && <span className="settings-badge is-ok">已載入</span>}
-                <span className={`settings-badge ${entry.verified ? "is-ok" : "is-warn"}`}>
-                  {entry.verified ? "已驗證" : "未驗證"}
-                </span>
-                <button
-                  type="button"
-                  disabled={busy === entry.name}
-                  onClick={() => {
-                    if (entry.enabled) {
-                      void run(entry.name, () => loader.setEnabled(entry.name, false));
-                      return;
+          entries.map((entry) => {
+            const expanded = open.includes(entry.name);
+            return (
+              <div className="settings-extension" key={entry.name}>
+                <div className="settings-row">
+                  <button
+                    type="button"
+                    className="settings-extension-head"
+                    aria-expanded={expanded}
+                    aria-controls={`extension-detail-${entry.name}`}
+                    onClick={() =>
+                      setOpen((current) =>
+                        expanded ? current.filter((name) => name !== entry.name) : [...current, entry.name],
+                      )
                     }
-                    // An unsigned plugin is a decision, not a click: V3 asked
-                    // for ten seconds of it, and that is worth keeping.
-                    if (!entry.verified && countdown?.name !== entry.name) {
-                      setCountdown({ name: entry.name, left: UNVERIFIED_WAIT });
-                      return;
-                    }
-                    void run(entry.name, () => loader.setEnabled(entry.name, true));
-                  }}
-                >
-                  {entry.enabled
-                    ? "停用"
-                    : countdown?.name === entry.name
-                      ? countdown.left > 0
-                        ? `請等待 ${countdown.left} 秒`
-                        : "確認啟用"
-                      : entry.verified
-                        ? "啟用"
-                        : "仍要啟用"}
-                </button>
-                {confirmRemove === entry.name ? (
-                  <>
-                    <button type="button" onClick={() => setConfirmRemove(null)}>
-                      取消
-                    </button>
+                  >
+                    <ChevronRight />
+                    {entry.info.name}
+                    {entry.info.version && <span className="settings-extension-version">{entry.info.version}</span>}
+                  </button>
+                  <div className="settings-actions">
+                    {entry.loaded && <span className="settings-badge is-ok">已載入</span>}
+                    {/* Enabled but not running: the dependency or the signature
+                        said no, and the reason is one unfold away. */}
+                    {entry.enabled && !entry.loaded && <span className="settings-badge is-warn">未載入</span>}
+                    <span className={`settings-badge ${entry.verified ? "is-ok" : "is-warn"}`}>
+                      {entry.verified ? "已驗證" : "未驗證"}
+                    </span>
                     <button
                       type="button"
-                      className="is-danger"
+                      disabled={busy === entry.name}
                       onClick={() => {
-                        setConfirmRemove(null);
-                        void run(entry.name, () => loader.remove(entry.name));
+                        if (entry.enabled) {
+                          void run(entry.name, () => loader.setEnabled(entry.name, false));
+                          return;
+                        }
+                        // An unsigned plugin is a decision, not a click: V3 asked
+                        // for ten seconds of it, and that is worth keeping.
+                        if (!entry.verified && countdown?.name !== entry.name) {
+                          setCountdown({ name: entry.name, left: UNVERIFIED_WAIT });
+                          return;
+                        }
+                        void run(entry.name, () => loader.setEnabled(entry.name, true));
                       }}
                     >
-                      確定刪除
+                      {entry.enabled
+                        ? "停用"
+                        : countdown?.name === entry.name
+                          ? countdown.left > 0
+                            ? `請等待 ${countdown.left} 秒`
+                            : "確認啟用"
+                          : entry.verified
+                            ? "啟用"
+                            : "仍要啟用"}
                     </button>
-                  </>
-                ) : (
-                  <button type="button" className="is-danger" onClick={() => setConfirmRemove(entry.name)}>
-                    <Trash2 /> 刪除
-                  </button>
+                    {confirmRemove === entry.name ? (
+                      <>
+                        <button type="button" onClick={() => setConfirmRemove(null)}>
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          className="is-danger"
+                          onClick={() => {
+                            setConfirmRemove(null);
+                            void run(entry.name, () => loader.remove(entry.name));
+                          }}
+                        >
+                          確定刪除
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="is-danger" onClick={() => setConfirmRemove(entry.name)}>
+                        <Trash2 /> 刪除
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {expanded && (
+                  <div className="settings-extension-body" id={`extension-detail-${entry.name}`}>
+                    {/* Why it is not running comes first: it is the only line
+                        here that asks the reader to do something. */}
+                    {entry.status && entry.status.type !== "ok" && (
+                      <p className={entry.status.type === "error" ? "settings-error" : "settings-note"}>
+                        {entry.status.msg}
+                      </p>
+                    )}
+                    {entry.verifyError && entry.verifyError !== entry.status?.msg && (
+                      <p className="settings-note">簽章：{entry.verifyError}</p>
+                    )}
+                    <p className="settings-extension-description">
+                      {localizedText(entry.info.description) ?? "沒有說明。"}
+                    </p>
+                    <p className="settings-note">作者：{authorNames(entry.info.author).join("、") || "未提供"}</p>
+                    <p className="settings-note">
+                      敏感度：{entry.sensitivity.description}
+                      {entry.keyId ? `（簽章金鑰：${entry.keyId}）` : ""}
+                    </p>
+                    {entry.info.dependencies && Object.keys(entry.info.dependencies).length > 0 && (
+                      <p className="settings-note">
+                        相依：
+                        {Object.entries(entry.info.dependencies)
+                          .map(([dependency, range]) => `${dependency} ${range}`)
+                          .join("、")}
+                      </p>
+                    )}
+                    {entry.hasConfig && <p className="settings-note">這個擴充功能有 config.yml。</p>}
+                  </div>
                 )}
               </div>
-            </Line>
-          ))
+            );
+          })
         )}
       </Section>
-
-      {entries.length > 0 && (
-        <Section title="詳細資料">
-          {entries.map((entry) => (
-            <Line key={entry.name} label={entry.name}>
-              <div className="settings-extension-detail">
-                <p>{localizedText(entry.info.description) ?? "沒有說明。"}</p>
-                <p className="settings-note">作者：{authorNames(entry.info.author).join("、") || "未提供"}</p>
-                <p className="settings-note">
-                  敏感度：{entry.sensitivity.description}
-                  {entry.keyId ? `（簽章金鑰：${entry.keyId}）` : ""}
-                </p>
-                {entry.status && entry.status.type !== "ok" && (
-                  <p className={entry.status.type === "error" ? "settings-error" : "settings-note"}>{entry.status.msg}</p>
-                )}
-                {entry.verifyError && entry.verifyError !== entry.status?.msg && (
-                  <p className="settings-note">簽章：{entry.verifyError}</p>
-                )}
-                {entry.info.dependencies && Object.keys(entry.info.dependencies).length > 0 && (
-                  <p className="settings-note">
-                    相依：
-                    {Object.entries(entry.info.dependencies)
-                      .map(([dependency, range]) => `${dependency} ${range}`)
-                      .join("、")}
-                  </p>
-                )}
-                {entry.hasConfig && <p className="settings-note">這個擴充功能有 config.yml。</p>}
-              </div>
-            </Line>
-          ))}
-        </Section>
-      )}
 
       <Section title="安裝">
         <Line label="將 .trem 檔案拖曳到這裡">
