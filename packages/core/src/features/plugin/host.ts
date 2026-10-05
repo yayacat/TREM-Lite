@@ -222,6 +222,11 @@ export class PluginLoader {
     for (const name of [...this.entries.keys()]) {
       if (!this.trees.has(name)) this.entries.delete(name);
     }
+    // Dependencies are checked once every manifest is in hand: a plugin may
+    // depend on one that sorts after it. V3 only checked while loading, so the
+    // row said nothing about a plugin until the next boot; checking here is
+    // what lets 設定 → 擴充 answer "why can this one not run" straight away.
+    for (const entry of this.entries.values()) this.validateDependencies(entry);
     this.changed();
   }
 

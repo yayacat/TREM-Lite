@@ -186,6 +186,14 @@ export function ExtensionsTab() {
                 {entry.verifyError && entry.verifyError !== entry.status?.msg && (
                   <p className="settings-note">簽章：{entry.verifyError}</p>
                 )}
+                {entry.info.dependencies && Object.keys(entry.info.dependencies).length > 0 && (
+                  <p className="settings-note">
+                    相依：
+                    {Object.entries(entry.info.dependencies)
+                      .map(([dependency, range]) => `${dependency} ${range}`)
+                      .join("、")}
+                  </p>
+                )}
                 {entry.hasConfig && <p className="settings-note">這個擴充功能有 config.yml。</p>}
               </div>
             </Line>
