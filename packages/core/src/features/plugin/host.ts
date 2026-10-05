@@ -12,7 +12,6 @@
  * Load order, verbatim from V3: scan → auto-enable → dependency order → start.
  */
 import { getVersion } from "@tauri-apps/api/app";
-import { unzipSync } from "fflate";
 import maplibregl from "maplibre-gl";
 
 import { events } from "@/lib/events";
@@ -28,10 +27,11 @@ import {
   removePlugin,
   writePluginFile,
 } from "./bridge";
-import { encodeBase64 } from "./base64";
+import { NAME_PATTERN, parsePackage } from "./package";
 import { MixinManager } from "./mixin";
 import { PLUGIN_ROOT, PluginRuntime, PluginTree } from "./sandbox";
 import { tremGlobal } from "./trem";
+import { authorNames, localizedText } from "./types";
 import type { LoadedPlugin, PluginEntry, PluginFile, PluginInfo, PluginStatus } from "./types";
 import { getVersionPrefixString, validateVersionRequirement } from "./version";
 import { verifyPlugin as verify } from "./verify";
@@ -42,9 +42,6 @@ const log = createLogger("plugin");
 const ENABLED_KEY = "enabled-plugins";
 /** What this host loaded, in V3's shape, for tooling that reads it. */
 const LOADED_KEY = "loaded-plugins";
-
-/** `info.json` names are lowercase, hyphenated, and nothing else. */
-const NAME_PATTERN = /^[a-z0-9-]+$/;
 
 /** V3's wording, kept verbatim: the 擴充 page greps for it. */
 const STATUS_INIT_FAILED = "初始化失敗，請聯繫擴充作者。";
@@ -235,7 +232,7 @@ export class PluginLoader {
       status: verified.valid ? null : { type: "warn", msg: verified.error ?? "未發現有效簽名。" },
       sensitivity: {
         level,
-        description: info.sensitivity?.description ?? getSensitivityDescription(level),
+        description: localizedText(info.sensitivity?.description) ?? getSensitivityDescription(level),
       },
       hasConfig: files.has("config.yml"),
     };
@@ -319,8 +316,8 @@ export class PluginLoader {
     const enabled = new Set(this.readEnabled());
 
     for (const entry of this.entries.values()) {
-      const author = entry.info.author ?? "";
-      if (entry.info["auto-enable"] === true && author.includes("ExpTechTW") && entry.verified) {
+      const byExptech = authorNames(entry.info.author).some((name) => name.includes("ExpTechTW"));
+      if (entry.info["auto-enable"] === true && byExptech && entry.verified) {
         enabled.add(entry.name);
       }
     }
@@ -554,30 +551,12 @@ export class PluginLoader {
    * most zips of a folder look like; that wrapper is stripped.
    */
   async installPackage(data: Uint8Array, name?: string): Promise<string> {
-    const archive = unzipSync(data);
-    const paths = Object.keys(archive).filter(
-      (path) => !path.endsWith("/") && !path.startsWith("__MACOSX/") && !path.endsWith(".DS_Store"),
-    );
-    const manifestPath = paths.find((path) => path === "info.json") ?? paths.find((path) => path.endsWith("/info.json"));
-    if (!manifestPath) throw new Error("套件裡找不到 info.json。");
-
-    let info: PluginInfo;
-    try {
-      info = JSON.parse(new TextDecoder().decode(archive[manifestPath])) as PluginInfo;
-    } catch (e) {
-      throw new Error(`info.json 不是合法的 JSON：${String(e)}`, { cause: e });
-    }
-    const plugin = name ?? info.name;
-    if (!plugin || !NAME_PATTERN.test(plugin)) {
+    const parsed = parsePackage(data);
+    const plugin = name ?? parsed.name;
+    if (!NAME_PATTERN.test(plugin)) {
       throw new Error("info.json 的 name 不合格式（僅允許小寫字母、數字與連字號）。");
     }
-
-    const prefix = manifestPath === "info.json" ? "" : `${manifestPath.slice(0, -"info.json".length)}`;
-    const files: PluginFile[] = paths.map((path) => ({
-      path: path.slice(prefix.length),
-      data: encodeBase64(archive[path]),
-    }));
-    await this.install(plugin, files, { replace: true });
+    await this.install(plugin, parsed.files, { replace: true });
     return plugin;
   }
 

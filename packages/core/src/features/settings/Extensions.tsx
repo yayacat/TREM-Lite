@@ -14,11 +14,11 @@
  */
 import { FolderOpen, Puzzle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { authorNames, localizedText, pluginLoader } from "../plugin";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
 import { createLogger } from "@/lib/logger";
 
-import { pluginLoader } from "../plugin";
 import type { PluginEntry } from "../plugin";
 
 const log = createLogger("plugin");
@@ -168,8 +168,8 @@ export function ExtensionsTab() {
           {entries.map((entry) => (
             <Line key={entry.name} label={entry.name}>
               <div className="settings-extension-detail">
-                <p>{entry.info.description ?? "沒有說明。"}</p>
-                <p className="settings-note">作者：{entry.info.author ?? "未提供"}</p>
+                <p>{localizedText(entry.info.description) ?? "沒有說明。"}</p>
+                <p className="settings-note">作者：{authorNames(entry.info.author).join("、") || "未提供"}</p>
                 <p className="settings-note">
                   敏感度：{entry.sensitivity.description}
                   {entry.keyId ? `（簽章金鑰：${entry.keyId}）` : ""}

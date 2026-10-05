@@ -19,6 +19,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parsePackage, zipSync } from "../../packages/core/src/features/plugin/package.ts";
+import { authorNames, localizedText } from "../../packages/core/src/features/plugin/types.ts";
 import { verifyPlugin } from "../../packages/core/src/features/plugin/verify.ts";
 import { compareVersions, parseVersion, validateVersionRequirement } from "../../packages/core/src/features/plugin/version.ts";
 
@@ -118,6 +120,42 @@ try {
     "requirements hold",
     validateVersionRequirement("26.0.0", ">=26.0.0") && !validateVersionRequirement("25.9.0", ">=26.0.0"),
   );
+  // The published manifests carry `description` as a locale table and `author`
+  // as an array (trem-radar-plugin, trem-logger-plugin); the 擴充 page has to
+  // get plain text out of either shape.
+  check("a localized description picks zh-Hant", localizedText({ zh_tw: "甲", "zh-Hant": "乙" }) === "乙");
+  check("a plain description still works", localizedText("說明") === "說明");
+  check(
+    "authors survive both shapes",
+    authorNames(["bamboo0403"]).join(",") === "bamboo0403" && authorNames("whes1015").join(",") === "whes1015",
+  );
+
+  // A `.trem` is a zip of the plugin folder. Authors zip on Windows, and
+  // Windows' own tools (`Compress-Archive`, 「傳送到 → 壓縮的資料夾」) write `\` in
+  // the entry names; both separators and both layouts have to install.
+  const bytes = (value: string) => encoder.encode(value);
+  const wrapped = parsePackage(
+    zipSync({
+      "demo\\info.json": bytes('{"name":"demo","version":"1.0.0"}'),
+      "demo\\index.js": bytes("module.exports = class {};"),
+    }),
+  );
+  check(
+    "a Windows-made archive installs",
+    wrapped.name === "demo" && wrapped.files.map((file) => file.path).sort().join(",") === "index.js,info.json",
+    JSON.stringify(wrapped.files.map((file) => file.path)),
+  );
+
+  const flat = parsePackage(zipSync({ "info.json": bytes('{"name":"flat"}'), "index.js": bytes("x") }));
+  check("an archive without a wrapper folder installs", flat.name === "flat" && flat.files.length === 2, String(flat.files.length));
+
+  let refused = "";
+  try {
+    parsePackage(zipSync({ "info.json": bytes('{"name":"Not A Name"}') }));
+  } catch (e) {
+    refused = String(e);
+  }
+  check("a bad plugin name is refused", refused.includes("name 不合格式"), refused);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

@@ -26,8 +26,8 @@
 {
   "name": "my-panel",
   "version": "1.0.0",
-  "description": "在地圖旁邊加一個自己的面板",
-  "author": "你的名字"
+  "description": { "zh_tw": "在地圖旁邊加一個自己的面板" },
+  "author": ["你的名字"]
 }
 ```
 
@@ -69,14 +69,18 @@ module.exports = (ctx) => {
 |---|---|---|
 | `name` | string | **必填**，同時是資料夾名稱。只允許小寫字母、數字與連字號。 |
 | `version` | string | 版本，供其他擴充功能的相依性比對。 |
-| `description` | string | 一行說明，顯示在設定頁。 |
-| `author` | string | 作者。含 `ExpTechTW` 且簽章有效時才會自動啟用。 |
+| `description` | string \| object | 一行說明，顯示在設定頁。物件型式為各語言的對照表，例如 `{ "zh_tw": "…", "zh-Hant": "…" }`。 |
+| `author` | string \| string[] | 作者，可寫成陣列。含 `ExpTechTW` 且簽章有效時才會自動啟用。 |
 | `loader` | string[] | 要載入到哪些視窗，預設 `["index"]`（主視窗）。 |
 | `auto-enable` | boolean | 首次看到就啟用。只有**簽章有效**且 `author` 含 `ExpTechTW` 才生效。 |
 | `dependencies` | object | 見下面的「相依性」。 |
 | `sensitivity` | object | `{ "level": 0-4, "description": "..." }`，作者自行宣告，顯示在設定頁。 |
+| `resources` | string[] | 授權條款識別碼，例如 `["AGPL-3.0"]`。 |
+| `link` | string | 專案首頁。 |
 
 其他欄位會原樣保留，可以放自己的設定。
+
+> 官方擴充功能的 `description` 是各語言的物件、`author` 是陣列，兩種寫法都支援；設定頁顯示時會挑 `zh-Hant`（其次 `zh_tw`、`en`）。
 
 ## `ctx`
 
@@ -237,7 +241,9 @@ node tool/plugin/sign.mjs ./my-panel --key private.pem --key-id my-key
 - 產生出來的 `signature.json` 有 `fileHashes`、`signature` 與可選的 `keyId`。
 - `keyId` 省略或填 `official` 時使用 ExpTech 的官方金鑰；其他值會對應到 `<設定資料夾>/plugin-keys/<keyId>.pem`，讓第三方用自己的金鑰簽章。使用者要自己放入對應的公開金鑰。
 
-打包成 `.trem`（就是一個 zip，`info.json` 在壓縮檔根目錄或往下一層都可以；`__MACOSX/` 與 `.DS_Store` 會被忽略）後，可以拖進設定頁的「安裝」區塊。安裝會**整包取代**既有的同名擴充功能 —— 舊版殘留的檔案會讓下一次簽章檢查回報多餘的檔案。
+打包成 `.trem`（就是一個 zip，`info.json` 在壓縮檔根目錄或往下一層都可以；`__MACOSX/` 與 `.DS_Store` 會被忽略）後，可以拖進設定頁的「安裝」區塊。Windows 內建的「傳送到 → 壓縮的資料夾」與 PowerShell 的 `Compress-Archive` 都可以直接用，最後把副檔名改成 `.trem` 即可；那些工具寫入的路徑分隔符號會在解壓時正規化。安裝會**整包取代**既有的同名擴充功能 —— 舊版殘留的檔案會讓下一次簽章檢查回報多餘的檔案。
+
+沒有簽章的擴充功能還是可以安裝與執行，但設定頁會標成「未驗證」，啟用前要等十秒倒數 —— 這是舊版就有的警告，不是錯誤。
 
 簽章工具本身有自我測試：
 

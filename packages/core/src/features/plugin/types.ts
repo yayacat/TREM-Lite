@@ -6,12 +6,19 @@
  * so this file describes what exists rather than what would be tidier.
  */
 
+/**
+ * V3 manifests ship text either as a plain string or as a table of locales —
+ * the published plugins carry `description: { "zh_tw": …, "zh-Hant": … }`.
+ */
+export type LocalizedText = string | Record<string, string>;
+
 /** `info.json` — the manifest every plugin ships. */
 export interface PluginInfo {
   name: string;
   version: string;
-  description?: string;
-  author?: string;
+  description?: LocalizedText;
+  /** A string, or a list of them: the store lists authors as an array. */
+  author?: LocalizedText | LocalizedText[];
   /** Which host this plugin runs in; `index` is the main window. */
   loader?: string[];
   /** Enable on first sight. Honoured only for a verified ExpTechTW plugin. */
@@ -19,8 +26,30 @@ export interface PluginInfo {
   /** `trem` is the host's version; every other key is another plugin's name. */
   dependencies?: Record<string, string>;
   /** What the plugin touches, as declared by its author. */
-  sensitivity?: { level?: number; description?: string };
+  sensitivity?: { level?: number; description?: LocalizedText };
+  /** Licence identifiers, as the plugin store lists them. */
+  resources?: string[];
+  /** The plugin's home page, as the plugin store lists it. */
+  link?: string;
   [key: string]: unknown;
+}
+
+/** This locale's wording, out of whatever shape the manifest used. */
+export function localizedText(value: LocalizedText | undefined): string | undefined {
+  if (typeof value === "string") return value || undefined;
+  if (!value) return undefined;
+  for (const key of ["zh-Hant", "zh_tw", "zh-TW", "zh-Hans", "zh_cn", "en", "en-US"]) {
+    const text = value[key];
+    if (typeof text === "string" && text) return text;
+  }
+  return Object.values(value).find((text) => typeof text === "string" && text) || undefined;
+}
+
+/** The authors, however the manifest spelled them. */
+export function authorNames(value: LocalizedText | LocalizedText[] | undefined): string[] {
+  if (!value) return [];
+  const list = Array.isArray(value) ? value : [value];
+  return list.map((item) => localizedText(item)).filter((name): name is string => Boolean(name));
 }
 
 /** `signature.json` — written by `tool/plugin/sign.mjs`. */
@@ -87,8 +116,8 @@ export interface PluginEntry {
 export interface LoadedPlugin {
   name: string;
   version: string;
-  description?: string;
-  author?: string;
+  description?: LocalizedText;
+  author?: LocalizedText | LocalizedText[];
   ctxDependencies: string[];
   sensitivity: { level: number; description: string };
 }

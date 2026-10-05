@@ -41,4 +41,5 @@ export function initPluginAdmin(): void {
 export { createPluginLoader, pluginLoader, PluginLoader, getSensitivityDescription } from "./host";
 export type { LoaderOptions, PluginContext } from "./host";
 export { MixinManager } from "./mixin";
-export type { LoadedPlugin, PluginEntry, PluginInfo } from "./types";
+export { authorNames, localizedText } from "./types";
+export type { LoadedPlugin, LocalizedText, PluginEntry, PluginInfo } from "./types";
