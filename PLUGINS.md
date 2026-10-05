@@ -179,19 +179,56 @@ const { helper } = ctx.require("./lib/helper");
 const other = ctx.require("../other-plugin/util"); // 另一個擴充功能
 ```
 
-**可以**用：`path`、`fs`、`fs-extra`、`buffer`、`process`、`events`、`util`、`os`、`url`、`crypto`。
+**可以**用：`path`、`fs`、`fs-extra`、`buffer`、`process`、`events`、`util`、`os`、`url`、`crypto`、`electron`。
 
 **不可以用**，會拿到明確的錯誤訊息：
 
 | 模組 | 訊息 |
 |---|---|
-| `electron`、`@electron/remote` | 擴充功能不能使用 Electron API。 |
+| `@electron/remote` | 擴充功能不能用 remote 取得主視窗，請改用 `ctx.TREM`。 |
 | `child_process` | 擴充功能不能啟動其他程式。 |
 | `worker_threads` | 擴充功能不能建立 worker。 |
 | `net` / `http` / `https` / `axios` | 擴充功能不能直接開 socket，請改用 `fetch`。 |
 | 其他 npm 套件 | 擴充功能不能載入 npm 套件，請改用相對路徑或 `ctx.require`。 |
 
 抓網路資料請用標準的 `fetch`，並以 `ctx.TREM.constant.URL` 取得官方端點。
+
+## 擴充功能視窗
+
+要開自己的視窗，跟舊版一樣送 `open-plugin-window`：
+
+```js
+const { ipcRenderer } = require("electron");
+
+ipcRenderer.send("open-plugin-window", {
+  pluginId: "my-panel",
+  htmlPath: `${info.pluginDir}/my-panel/web/index.html`,
+  options: { width: 886, height: 673, title: "My Panel" },
+});
+```
+
+`options` 支援 `width`、`height`、`minWidth`、`minHeight`、`title`、`resizable`，省略時是 800×600。同一個擴充功能再開一次會先關掉舊的再開新的，不會疊出好幾個視窗。視窗開好後主視窗會收到 `plugin-window-opened`，關掉時收到 `plugin-window-closed`。
+
+頁面由應用程式自己的協定提供（Windows 上是 `http://trem-plugin.localhost/`），所以 `./js/map.js`、`fetch("./data/region.json")` 這類相對路徑都能用，頁面也可以直接連外抓 CDN。頁面裡一樣有 `require`：
+
+```js
+const { ipcRenderer } = require("electron");
+ipcRenderer.send("openDevtool");
+document.querySelector("#close").onclick = () => ipcRenderer.send("hide");
+```
+
+頁面沒有檔案系統；要讀資料請在主視窗算好再送過去：
+
+```js
+ipcRenderer.send("send-to-plugin-window", { windowId: "my-panel", channel: "rows", payload: rows });
+ipcRenderer.send("broadcast-to-plugin-windows", { pluginId: "my-panel", channel: "rows", payload: rows });
+```
+
+`windowId` 填自己的名稱就好（舊版擴充功能幾乎都這樣寫）；視窗那側用 `ipcRenderer.on("rows", (event, payload) => …)` 收。
+
+其他舊版就有的通道：`close-plugin-window`、`close-plugin-windows`、`get-plugin-windows`（回覆 `plugin-windows-list`）、`reload`、`all-reload`、`openDevtool`、`toggleFullscreen`、`hide`、`openPluginFolder`、`openConfigFolder`、`openReplayFolder`、`openTempFolder`、`minimize-window`、`maximize-window`、`restore-window`。
+
+兩邊都還有後路：主視窗送出的未知通道會轉給該擴充功能自己的視窗，頁面送出的未知通道則以 `plugin-window-message` 交給主視窗的擴充功能。
 
 ## 相依性
 
@@ -257,7 +294,7 @@ bun tool/plugin/selftest.ts
 
 ## 與 TREM-Lite 3 的差異
 
-- **沒有 Electron**：`electron` 與 `@electron/remote` 都不能用，視窗控制請改用 `ctx.TREM` 或設定頁。
+- **`electron` 只有 `ipcRenderer`、`contextBridge` 與 `shell`**：`ipcRenderer` 背後是應用程式自己的視窗（見上一節），`@electron/remote` 不能用。舊版把 `BrowserWindow`、`Menu` 這類東西直接給擴充功能，v4 只給開視窗與傳訊息的通道。
 - **沒有 Node 的網路模組**：`http`、`https`、`net` 都不可用，請用 `fetch`。
 - **`TREM.class` 只剩 `AudioManager`**：舊版還有 `DataManager`、`ReportManager`、`FocusManager`、`EewAreaManager`、`BoxManager`、`ReplayControler`、`WindowControler`，這些工作在 v4 由 Rust 與 `packages/core/src/features/` 負責，資料請從 `TREM.variable` 與事件取得。
 - **`ctx.info.name` 是新增的**：不用再從 `info.pluginDir` 推自己的名字。

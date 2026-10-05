@@ -10,11 +10,14 @@
  * `/plugins`, mirroring the real directory — the same layout
  * `ctx.info.pluginDir` pointed at in V3.
  *
- * Deliberately absent: any path outside `/plugins`, `child_process`, Electron
- * and npm packages. A plugin that reaches for one gets a named error rather
- * than a confusing `undefined`.
+ * Deliberately absent: any path outside `/plugins`, `child_process` and npm
+ * packages. A plugin that reaches for one gets a named error rather than a
+ * confusing `undefined`. `electron` is not absent: `ipcRenderer` is what every
+ * extension that has a window of its own starts with, and `electron.ts` answers
+ * it with the host's own windows.
  */
 import { encodeBase64, type Bytes } from "./base64";
+import { electronModule } from "./electron";
 import { dirname, isAbsolute, join, normalize, path as pathsModule, resolve, type PathModule } from "./paths";
 
 const decoder = new TextDecoder("utf-8");
@@ -542,6 +545,8 @@ export class PluginRuntime {
         return { URL, URLSearchParams, pathToFileURL, fileURLToPath, default: { URL, URLSearchParams } };
       case "crypto":
         return cryptoShim;
+      case "electron":
+        return electronModule(this.options.plugin);
       default:
         throw new Error(UNSUPPORTED[name] ?? `Cannot find module '${name}'`);
     }
@@ -598,12 +603,12 @@ const BUILTINS: Record<string, true> = {
   os: true,
   url: true,
   crypto: true,
+  electron: true,
 };
 
 /** Named refusals: a plugin that needs one of these needs a different host. */
 const UNSUPPORTED: Record<string, string> = {
-  electron: "擴充功能不能使用 Electron API，需要自己開視窗的擴充功能尚未支援。",
-  "@electron/remote": "擴充功能不能使用 Electron API，需要自己開視窗的擴充功能尚未支援。",
+  "@electron/remote": "擴充功能不能用 remote 取得主視窗，請改用 ctx.TREM。",
   child_process: "擴充功能不能啟動其他程式。",
   "node:child_process": "擴充功能不能啟動其他程式。",
   worker_threads: "擴充功能不能建立 worker。",

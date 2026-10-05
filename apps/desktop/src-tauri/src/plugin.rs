@@ -45,7 +45,7 @@ pub struct PluginKey {
 }
 
 /// `info.json`'s `name` is also the directory name, so it must not traverse.
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 128
         && name
@@ -53,19 +53,19 @@ fn valid_name(name: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
-fn base_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn base_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_config_dir()
         .map_err(|e| format!("no config dir: {e}"))
 }
 
-fn plugins_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn plugins_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = base_dir(app)?.join("plugins");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
 
-fn plugin_dir(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
+pub(crate) fn plugin_dir(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
     if !valid_name(name) {
         return Err(format!("插件名稱不合法：{name}"));
     }
@@ -73,7 +73,7 @@ fn plugin_dir(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
 }
 
 /// Reject absolute paths and `..`, so a plugin cannot escape its directory.
-fn safe_relative(rel: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_relative(rel: &str) -> Result<PathBuf, String> {
     let mut out = PathBuf::new();
     for part in rel.replace('\\', "/").split('/') {
         if part.is_empty() || part == "." {
