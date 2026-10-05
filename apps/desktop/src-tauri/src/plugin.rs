@@ -257,7 +257,11 @@ pub fn plugin_packages(app: tauri::AppHandle) -> Result<Vec<PluginFile>, String>
     {
         // `file_type()` rather than `path.is_file()`: a link out of the folder
         // is not a package this host should read.
-        if !entry.file_type().map(|kind| kind.is_file()).unwrap_or(false) {
+        if !entry
+            .file_type()
+            .map(|kind| kind.is_file())
+            .unwrap_or(false)
+        {
             continue;
         }
         let path = entry.path();

@@ -98,7 +98,13 @@ fn split_html_path(path: &str) -> Result<(String, String), String> {
 // -- serving ---------------------------------------------------------------
 
 fn mime_for(path: &str) -> &'static str {
-    match path.rsplit('.').next().unwrap_or_default().to_ascii_lowercase().as_str() {
+    match path
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "html" | "htm" => "text/html; charset=utf-8",
         "js" | "mjs" => "text/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
@@ -125,7 +131,10 @@ fn mime_for(path: &str) -> &'static str {
 }
 
 /// The plugin folder's file for a request path, or the status to answer with.
-fn resolve(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Result<PathBuf, (StatusCode, String)> {
+fn resolve(
+    app: &tauri::AppHandle,
+    request: &Request<Vec<u8>>,
+) -> Result<PathBuf, (StatusCode, String)> {
     let uri = request.uri();
     let path = uri.path();
     // Windows: host `trem-plugin.localhost`, path `/plugins/…`.
@@ -151,7 +160,8 @@ fn resolve(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Result<PathBuf
         ));
     }
     let page = if page.is_empty() { "index.html" } else { page };
-    let relative = crate::plugin::safe_relative(page).map_err(|e| bad(StatusCode::BAD_REQUEST, e))?;
+    let relative =
+        crate::plugin::safe_relative(page).map_err(|e| bad(StatusCode::BAD_REQUEST, e))?;
     let file = crate::plugin::plugin_dir(app, name)
         .map_err(|e| bad(StatusCode::INTERNAL_SERVER_ERROR, e))?
         .join(relative);
@@ -167,10 +177,7 @@ fn resolve(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Result<PathBuf
     Ok(file)
 }
 
-fn serve(
-    app: &tauri::AppHandle,
-    request: &Request<Vec<u8>>,
-) -> Response<Vec<u8>> {
+fn serve(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
     let uri = request.uri().to_string();
     let file = match resolve(app, request) {
         Ok(file) => file,
@@ -183,19 +190,31 @@ fn serve(
         Ok(bytes) => bytes,
         Err(e) => {
             log::warn!("擴充功能視窗要求 {uri}：讀不到檔案：{e}");
-            return plain(StatusCode::INTERNAL_SERVER_ERROR, &format!("讀不到檔案：{e}"));
+            return plain(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("讀不到檔案：{e}"),
+            );
         }
     };
     let name = file
         .strip_prefix(crate::plugin::plugins_dir(app).unwrap_or_default())
         .ok()
-        .and_then(|rest| rest.components().next().map(|part| part.as_os_str().to_string_lossy().into_owned()))
+        .and_then(|rest| {
+            rest.components()
+                .next()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        })
         .unwrap_or_default();
     let mime = mime_for(&file.to_string_lossy());
     let body = if mime.starts_with("text/html") {
         match String::from_utf8(bytes) {
             Ok(html) => inject(&html, &name).into_bytes(),
-            Err(e) => return plain(StatusCode::INTERNAL_SERVER_ERROR, &format!("網頁不是 UTF-8：{e}")),
+            Err(e) => {
+                return plain(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    &format!("網頁不是 UTF-8：{e}"),
+                )
+            }
         }
     } else {
         bytes
@@ -367,7 +386,8 @@ fn inject(html: &str, plugin: &str) -> String {
             &serde_json::to_string(plugin).unwrap_or_else(|_| "\"\"".into()),
         )
         .replace("__PLATFORM__", &format!("\"{}\"", std::env::consts::OS));
-    let head = find_ci(html, "<head").and_then(|index| html[index..].find('>').map(|close| index + close + 1));
+    let head = find_ci(html, "<head")
+        .and_then(|index| html[index..].find('>').map(|close| index + close + 1));
     match head {
         Some(index) => format!("{}{}{}", &html[..index], script, &html[index..]),
         None => format!("{script}{html}"),
@@ -382,7 +402,8 @@ fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
     if target.len() > bytes.len() {
         return None;
     }
-    (0..=bytes.len() - target.len()).find(|&i| bytes[i..i + target.len()].eq_ignore_ascii_case(target))
+    (0..=bytes.len() - target.len())
+        .find(|&i| bytes[i..i + target.len()].eq_ignore_ascii_case(target))
 }
 
 // -- windows ---------------------------------------------------------------
@@ -416,7 +437,10 @@ fn open_window(
                 .clone()
                 .unwrap_or_else(|| format!("擴充功能 {plugin}")),
         )
-        .inner_size(options.width.unwrap_or(800.0), options.height.unwrap_or(600.0))
+        .inner_size(
+            options.width.unwrap_or(800.0),
+            options.height.unwrap_or(600.0),
+        )
         .resizable(options.resizable.unwrap_or(true))
         .decorations(true);
     if let (Some(width), Some(height)) = (options.min_width, options.min_height) {
@@ -449,7 +473,12 @@ pub fn closed(app: &tauri::AppHandle, label: &str) {
     );
 }
 
-fn dispatch(app: &tauri::AppHandle, plugin: &str, channel: &str, payload: Value) -> Result<(), String> {
+fn dispatch(
+    app: &tauri::AppHandle,
+    plugin: &str,
+    channel: &str,
+    payload: Value,
+) -> Result<(), String> {
     let label = window_label(plugin);
     let window = app
         .get_webview_window(&label)
@@ -463,7 +492,12 @@ fn dispatch(app: &tauri::AppHandle, plugin: &str, channel: &str, payload: Value)
         .map_err(|e| format!("傳送訊息給擴充功能視窗失敗：{e}"))
 }
 
-fn broadcast(app: &tauri::AppHandle, plugin: &str, channel: &str, payload: Value) -> Result<(), String> {
+fn broadcast(
+    app: &tauri::AppHandle,
+    plugin: &str,
+    channel: &str,
+    payload: Value,
+) -> Result<(), String> {
     let channel = serde_json::to_string(channel).unwrap_or_else(|_| "\"\"".into());
     let payload = serde_json::to_string(&payload).unwrap_or_else(|_| "null".into());
     let prefix = window_label(plugin);
@@ -664,17 +698,23 @@ pub async fn plugin_window_ipc(
         }
         "reload" => return plugin_window_eval(&app, &plugin, from_page, "location.reload()"),
         "openDevtool" => {
-            if let Some(window) = app.get_webview_window(&(if from_page {
-                window_label(&plugin)
-            } else {
-                "main".into()
-            })) {
+            if let Some(window) = app.get_webview_window(
+                &(if from_page {
+                    window_label(&plugin)
+                } else {
+                    "main".into()
+                }),
+            ) {
                 window.open_devtools();
             }
             return Ok(());
         }
         "toggleFullscreen" => {
-            let label = if from_page { window_label(&plugin) } else { "main".into() };
+            let label = if from_page {
+                window_label(&plugin)
+            } else {
+                "main".into()
+            };
             if let Some(window) = app.get_webview_window(&label) {
                 let full = window.is_fullscreen().unwrap_or(false);
                 let _ = window.set_fullscreen(!full);
@@ -764,7 +804,11 @@ fn window_state_call(
     from_page: bool,
     action: &str,
 ) -> Result<(), String> {
-    let label = if from_page { window_label(plugin) } else { "main".into() };
+    let label = if from_page {
+        window_label(plugin)
+    } else {
+        "main".into()
+    };
     let Some(window) = app.get_webview_window(&label) else {
         return Ok(());
     };
