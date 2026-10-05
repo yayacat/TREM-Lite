@@ -698,6 +698,10 @@ pub async fn plugin_window_ipc(
         }
         "reload" => return plugin_window_eval(&app, &plugin, from_page, "location.reload()"),
         "openDevtool" => {
+            // `open_devtools` is compiled only when devtools exist (see lib.rs):
+            // a release binary has no such method, so the arm answers the
+            // plugin without doing anything there instead of failing to build.
+            #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window(
                 &(if from_page {
                     window_label(&plugin)
