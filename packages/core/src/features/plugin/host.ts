@@ -45,12 +45,28 @@ const log = createLogger("plugin");
 const ENABLED_KEY = "enabled-plugins";
 /** What this host loaded, in V3's shape, for tooling that reads it. */
 const LOADED_KEY = "loaded-plugins";
+/** What the last load decided about each one — the key V3's 擴充 page read. */
+const STATUS_KEY = "plugin-status";
 
 /** V3's wording, kept verbatim: the 擴充 page greps for it. */
 const STATUS_INIT_FAILED = "初始化失敗，請聯繫擴充作者。";
 const STATUS_DISABLED = "未啟用。";
 /** The 擴充 page records the choice; the main window loads it at the next boot. */
 const STATUS_RESTART = "將於下次啟動時載入。";
+
+/**
+ * Turn a failure into something the 擴充 page can show next to the plugin.
+ *
+ * V3 said "contact the author" and left it there; the author cannot act on that
+ * sentence alone. The reason is either ours (`不能使用 Electron API`) or the
+ * plugin's own, and it is what the plugin's author needs to be told — kept to
+ * one line, because the row has one.
+ */
+function failureReason(error: unknown): string {
+  const text = (error instanceof Error ? error.message : String(error)).split("\n")[0]?.trim() ?? "";
+  if (!text) return "";
+  return `（${text.length > 120 ? `${text.slice(0, 119)}…` : text}）`;
+}
 
 export function getSensitivityDescription(level: number): string {
   switch (level) {
@@ -122,6 +138,12 @@ export class PluginLoader {
   private running = new Map<string, RunningPlugin>();
   private trees = new Map<string, Map<string, Uint8Array>>();
   private keys = new Map<string, string>();
+  /**
+   * What the main window's last load concluded, read from `plugin-status`.
+   *
+   * Empty in the main window, which knows the answer first hand.
+   */
+  private reported: Record<string, PluginStatus> = {};
   private listeners = new Set<() => void>();
   private started = false;
   /** The app's own version, as `dependencies.trem` is compared against. */
@@ -190,6 +212,7 @@ export class PluginLoader {
     this.rootPath = await pluginRoot();
     this.trees = await readPlugins();
     this.keys = new Map((await pluginKeys()).map((key) => [key.id, key.pem]));
+    this.reported = this.management ? this.readStatus() : {};
 
     for (const [name, files] of this.trees) {
       const entry = await this.inspect(name, files);
@@ -223,6 +246,11 @@ export class PluginLoader {
 
     const verified = await verify(files, this.keys);
     const level = info.sensitivity?.level ?? 0;
+    // The settings window runs no plugin of its own, so why one is not running
+    // can only come from what the main window wrote under `plugin-status` —
+    // which is exactly what V3's `setting/plugin_list.js` read it for. The
+    // main window is the one that finds out first hand, so it ignores the key.
+    const reported = this.reported[name];
     return {
       name: info.name,
       info,
@@ -232,7 +260,7 @@ export class PluginLoader {
       keyId: verified.keyId,
       enabled: this.readEnabled().includes(name),
       loaded: this.management && this.readLoaded().includes(name),
-      status: verified.valid ? null : { type: "warn", msg: verified.error ?? "未發現有效簽名。" },
+      status: reported ?? (verified.valid ? null : { type: "warn", msg: verified.error ?? "未發現有效簽名。" }),
       sensitivity: {
         level,
         description: localizedText(info.sensitivity?.description) ?? getSensitivityDescription(level),
@@ -277,6 +305,17 @@ export class PluginLoader {
 
   isEnabled(name: string): boolean {
     return this.entries.get(name)?.enabled ?? false;
+  }
+
+  /** What the last load decided, in V3's shape, for the 擴充 page. */
+  private readStatus(): Record<string, PluginStatus> {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STATUS_KEY) ?? "{}") as unknown;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+      return raw as Record<string, PluginStatus>;
+    } catch {
+      return {};
+    }
   }
 
   /** Turn one plugin on and start it, or off and unhook it. */
@@ -438,7 +477,7 @@ export class PluginLoader {
     } catch (e) {
       log.error(`擴充功能 ${name} 初始化失敗：${String(e)}`);
       entry.loaded = false;
-      entry.status = { type: "error", msg: STATUS_INIT_FAILED };
+      entry.status = { type: "error", msg: `${STATUS_INIT_FAILED}${failureReason(e)}` };
       return false;
     }
   }
@@ -627,7 +666,7 @@ export class PluginLoader {
       for (const entry of this.entries.values()) {
         if (entry.status) status[entry.name] = entry.status;
       }
-      localStorage.setItem("plugin-status", JSON.stringify(status));
+      localStorage.setItem(STATUS_KEY, JSON.stringify(status));
     } catch (e) {
       log.warn(`無法寫入擴充功能狀態：${String(e)}`);
     }

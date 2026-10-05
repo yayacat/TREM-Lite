@@ -99,7 +99,7 @@ export function ExtensionsTab() {
     <>
       <Section
         title="已安裝的擴充功能"
-        note="擴充功能由社群提供，安裝前請確認來源。未簽章的擴充功能無法驗證作者身分。"
+        note="擴充功能由社群提供，安裝前請確認來源。未簽章的擴充功能無法驗證作者身分。載入結果是上一次啟動的紀錄，改了設定要重新啟動才會生效。"
       >
         {entries.length === 0 ? (
           <Line label="沒有安裝任何擴充功能">
@@ -182,6 +182,9 @@ export function ExtensionsTab() {
                 </p>
                 {entry.status && entry.status.type !== "ok" && (
                   <p className={entry.status.type === "error" ? "settings-error" : "settings-note"}>{entry.status.msg}</p>
+                )}
+                {entry.verifyError && entry.verifyError !== entry.status?.msg && (
+                  <p className="settings-note">簽章：{entry.verifyError}</p>
                 )}
                 {entry.hasConfig && <p className="settings-note">這個擴充功能有 config.yml。</p>}
               </div>

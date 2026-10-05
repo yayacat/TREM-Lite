@@ -602,8 +602,8 @@ const BUILTINS: Record<string, true> = {
 
 /** Named refusals: a plugin that needs one of these needs a different host. */
 const UNSUPPORTED: Record<string, string> = {
-  electron: "擴充功能不能使用 Electron API。",
-  "@electron/remote": "擴充功能不能使用 Electron API。",
+  electron: "擴充功能不能使用 Electron API，需要自己開視窗的擴充功能尚未支援。",
+  "@electron/remote": "擴充功能不能使用 Electron API，需要自己開視窗的擴充功能尚未支援。",
   child_process: "擴充功能不能啟動其他程式。",
   "node:child_process": "擴充功能不能啟動其他程式。",
   worker_threads: "擴充功能不能建立 worker。",
