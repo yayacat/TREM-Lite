@@ -8,6 +8,7 @@ mod logging;
 mod math;
 mod ml_intensity;
 mod ntp;
+mod plugin;
 #[cfg(desktop)]
 mod updater;
 #[cfg(not(desktop))]
@@ -204,6 +205,12 @@ pub fn run() {
             http_proxy::http_report,
             math::eew_area_intensity,
             ntp::ntp_sync,
+            plugin::plugin_root,
+            plugin::plugin_list,
+            plugin::plugin_write,
+            plugin::plugin_install,
+            plugin::plugin_remove,
+            plugin::plugin_keys,
             updater::update_check,
             updater::update_pending,
             updater::update_restart,
