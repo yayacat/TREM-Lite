@@ -22,7 +22,23 @@ export function initPlugins(): void {
   });
 }
 
+/**
+ * 設定 → 擴充 — the same loader, without the loading.
+ *
+ * The settings window is a second webview: it lists the extensions, verifies
+ * them, installs, removes and records what is enabled, but it must not start
+ * one — a plugin reaches for the map, the station feed and the audio engine,
+ * and those live in the main window. V3 read `enabled-plugins` at boot as well,
+ * so a change made here takes effect the next time the app starts.
+ */
+export function initPluginAdmin(): void {
+  const loader = createPluginLoader("index", { management: true });
+  loader.scan().catch((e: unknown) => {
+    log.error(`擴充功能清單讀取失敗：${String(e)}`);
+  });
+}
+
 export { createPluginLoader, pluginLoader, PluginLoader, getSensitivityDescription } from "./host";
-export type { PluginContext } from "./host";
+export type { LoaderOptions, PluginContext } from "./host";
 export { MixinManager } from "./mixin";
 export type { LoadedPlugin, PluginEntry, PluginInfo } from "./types";

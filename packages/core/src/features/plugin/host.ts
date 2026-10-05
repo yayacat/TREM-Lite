@@ -49,6 +49,8 @@ const NAME_PATTERN = /^[a-z0-9-]+$/;
 /** V3's wording, kept verbatim: the 擴充 page greps for it. */
 const STATUS_INIT_FAILED = "初始化失敗，請聯繫擴充作者。";
 const STATUS_DISABLED = "未啟用。";
+/** The 擴充 page records the choice; the main window loads it at the next boot. */
+const STATUS_RESTART = "將於下次啟動時載入。";
 
 export function getSensitivityDescription(level: number): string {
   switch (level) {
@@ -102,8 +104,19 @@ interface InstallOptions {
   replace?: boolean;
 }
 
+/**
+ * 設定 → 擴充 is a second webview. It lists, verifies, installs and removes; the
+ * plugins themselves belong to the main window, where the map and the data feed
+ * are. `management` is how that window keeps this one from starting anything.
+ */
+export interface LoaderOptions {
+  management?: boolean;
+}
+
 export class PluginLoader {
   private readonly type: string;
+  /** Built by 設定 → 擴充: read, verify and record, but never run. */
+  private readonly management: boolean;
   /** Rows the 擴充 page shows, keyed by plugin name. */
   private entries = new Map<string, PluginEntry>();
   private running = new Map<string, RunningPlugin>();
@@ -113,11 +126,17 @@ export class PluginLoader {
   private started = false;
   /** The app's own version, as `dependencies.trem` is compared against. */
   tremVersion = "";
-  /** `<app_config_dir>/plugins` — where the tree on disk actually is. */
-  rootPath = PLUGIN_ROOT;
+  /**
+   * `<app_config_dir>/plugins` — where the tree on disk actually is.
+   *
+   * Empty until `scan()` has asked: `/plugins` is the sandbox's name for the
+   * same place, not a path anything outside the plugin runtime can open.
+   */
+  rootPath = "";
 
-  constructor(type = "index") {
+  constructor(type = "index", options: LoaderOptions = {}) {
     this.type = type;
+    this.management = options.management ?? false;
   }
 
   // -- reading -------------------------------------------------------------
@@ -211,8 +230,8 @@ export class PluginLoader {
       verified: verified.valid,
       verifyError: verified.error,
       keyId: verified.keyId,
-      enabled: false,
-      loaded: false,
+      enabled: this.readEnabled().includes(name),
+      loaded: this.management && this.readLoaded().includes(name),
       status: verified.valid ? null : { type: "warn", msg: verified.error ?? "未發現有效簽名。" },
       sensitivity: {
         level,
@@ -237,6 +256,25 @@ export class PluginLoader {
     localStorage.setItem(ENABLED_KEY, JSON.stringify([...new Set(names)]));
   }
 
+  /**
+   * What the *main* window left behind under V3's `loaded-plugins` key.
+   *
+   * The settings window runs no plugin of its own, so 已載入 cannot come from
+   * this process; it comes from that key — which is how V3's
+   * `setting/plugin_list.js` learned it too.
+   */
+  private readLoaded(): string[] {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LOADED_KEY) ?? "[]") as unknown;
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .map((item) => (item as LoadedPlugin | undefined)?.name)
+        .filter((name): name is string => typeof name === "string");
+    } catch {
+      return [];
+    }
+  }
+
   isEnabled(name: string): boolean {
     return this.entries.get(name)?.enabled ?? false;
   }
@@ -249,7 +287,11 @@ export class PluginLoader {
     if (enabled) {
       this.writeEnabled([...this.readEnabled(), name]);
       entry.enabled = true;
-      await this.start(name);
+      if (this.management) {
+        entry.status = { type: "warn", msg: STATUS_RESTART };
+      } else {
+        await this.start(name);
+      }
     } else {
       this.writeEnabled(this.readEnabled().filter((item) => item !== name));
       entry.enabled = false;
@@ -581,8 +623,8 @@ export class PluginLoader {
 /** One loader for the app, created on first use. */
 let instance: PluginLoader | null = null;
 
-export function createPluginLoader(type = "index"): PluginLoader {
-  instance ??= new PluginLoader(type);
+export function createPluginLoader(type = "index", options: LoaderOptions = {}): PluginLoader {
+  instance ??= new PluginLoader(type, options);
   return instance;
 }
 

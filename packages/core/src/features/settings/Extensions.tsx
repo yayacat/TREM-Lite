@@ -81,7 +81,7 @@ export function ExtensionsTab() {
     setNote(null);
     try {
       const name = await loader.installPackage(new Uint8Array(await file.arrayBuffer()));
-      setNote(`已安裝 ${name}，啟用後即會載入。`);
+      setNote(`已安裝 ${name}，啟用後將於下次啟動載入。`);
     } catch (e) {
       setNote(`安裝失敗：${String(e)}`);
     } finally {
@@ -205,7 +205,7 @@ export function ExtensionsTab() {
           </div>
         </Line>
         <Line label="擴充功能資料夾">
-          <button type="button" onClick={() => void revealItemInDir(loader.rootPath)}>
+          <button type="button" disabled={!loader.rootPath} onClick={() => void revealItemInDir(loader.rootPath)}>
             <FolderOpen /> 開啟
           </button>
         </Line>
