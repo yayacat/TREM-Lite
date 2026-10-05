@@ -22,7 +22,12 @@ import { fileURLToPath } from "node:url";
 import { parsePackage, zipSync } from "../../packages/core/src/features/plugin/package.ts";
 import { authorNames, localizedText } from "../../packages/core/src/features/plugin/types.ts";
 import { verifyPlugin } from "../../packages/core/src/features/plugin/verify.ts";
-import { compareVersions, parseVersion, validateVersionRequirement } from "../../packages/core/src/features/plugin/version.ts";
+import {
+  compareVersions,
+  getVersionPrefixString,
+  parseVersion,
+  validateVersionRequirement,
+} from "../../packages/core/src/features/plugin/version.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const work = mkdtempSync(join(tmpdir(), "trem-plugin-selftest-"));
@@ -116,9 +121,51 @@ try {
   const parsed = parseVersion("26.1.0-26w40a");
   check("versions parse", parsed?.major === 26 && parsed.minor === 1 && parsed.patch === 0);
   check("versions compare", compareVersions("26.1.0", "26.0.9") === true && compareVersions("26.0.0", "26.1.0") === false);
+
+  // The weekly snapshot tag is part of the version: a plugin may ask for a
+  // newer snapshot than the one running, and a snapshot build must not pass
+  // `=26.1.0`, which names the release rather than any build of it.
+  const snapshot = "26.1.0-26w39a";
+  for (const [requirement, wanted, why] of [
+    ["26.1.0-26w39a", true, "the same snapshot"],
+    ["=26.1.0-26w39a", true, "exactly this snapshot"],
+    ["=26.1.0", false, "the release is not this snapshot"],
+    [">=26.1.0-26w39a", true, "as new as the one running"],
+    [">=26.1.0-26w38a", true, "an older snapshot"],
+    [">=26.1.0-26w40a", false, "a newer snapshot"],
+    [">=26.1.0", false, "a snapshot sorts below its release"],
+    ["<26.1.0", true, "the release it precedes"],
+    ["<26.1.0-26w40a", true, "an older snapshot"],
+    ["<26.1.0-26w38a", false, "a newer snapshot"],
+    [">=26.0.0", true, "the same minor or newer"],
+  ] as [string, boolean, string][]) {
+    check(
+      `${snapshot} ${requirement} is ${wanted} (${why})`,
+      validateVersionRequirement(snapshot, requirement) === wanted,
+      `wanted ${wanted}`,
+    );
+  }
+  check(
+    "pre-release segments compare as numbers",
+    validateVersionRequirement("1.2.3-rc.10", ">=1.2.3-rc.9") && !validateVersionRequirement("1.2.3-rc.9", ">=1.2.3-rc.10"),
+  );
   check(
     "requirements hold",
     validateVersionRequirement("26.0.0", ">=26.0.0") && !validateVersionRequirement("25.9.0", ">=26.0.0"),
+  );
+
+  // Authors write the operator apart from the version often enough that both
+  // spellings have to mean the same thing; `==` is read as `=`.
+  for (const requirement of [">=26.0.0", ">= 26.0.0", ">=  26.0.0"]) {
+    check(`${JSON.stringify(requirement)} is satisfied by 26.1.0-26w39a`, validateVersionRequirement(snapshot, requirement));
+  }
+  check("a spaced pair of ranges still holds", validateVersionRequirement(snapshot, ">= 26.1.0-26w39a < 26.2.0"));
+  check("a spaced pair still refuses", !validateVersionRequirement(snapshot, ">= 26.1.0-26w40a < 26.2.0"));
+  check("`==` means `=`", validateVersionRequirement(snapshot, "== 26.1.0-26w39a"));
+  check(
+    "the refusal message spells the requirement out",
+    getVersionPrefixString(">= 1.0.0 < 2.0.0") === "大於等於 1.0.0 且 小於 2.0.0",
+    getVersionPrefixString(">= 1.0.0 < 2.0.0"),
   );
   // The published manifests carry `description` as a locale table and `author`
   // as an array (trem-radar-plugin, trem-logger-plugin); the 擴充 page has to
