@@ -230,6 +230,8 @@ ipcRenderer.send("broadcast-to-plugin-windows", { pluginId: "my-panel", channel:
 
 兩邊都還有後路：主視窗送出的未知通道會轉給該擴充功能自己的視窗，頁面送出的未知通道則以 `plugin-window-message` 交給主視窗的擴充功能。
 
+視窗裡的錯誤會寫進應用程式日誌，不會再無聲無息：頁面拋出的例外、沒有接住的 `Promise`，以及載入失敗的資源（`<script src>`、`<link href>`，例如連不上 CDN）都會以 `擴充功能視窗 …` 開頭記下來，附上檔名與行號；應用程式讀不到某個檔案時也會留一行。開發時在視窗裡按 <kbd>F12</kbd> 可以直接開 DevTools（舊版的 `openDevtool` 通道也可以）。
+
 ## 導覽列按鈕
 
 要在左下角的按鈕列加一顆自己的按鈕，舊版的做法是插在 `#focus` 後面：

@@ -171,13 +171,20 @@ fn serve(
     app: &tauri::AppHandle,
     request: &Request<Vec<u8>>,
 ) -> Response<Vec<u8>> {
+    let uri = request.uri().to_string();
     let file = match resolve(app, request) {
         Ok(file) => file,
-        Err((status, message)) => return plain(status, &message),
+        Err((status, message)) => {
+            log::warn!("擴充功能視窗要求 {uri}：{message}");
+            return plain(status, &message);
+        }
     };
     let bytes = match std::fs::read(&file) {
         Ok(bytes) => bytes,
-        Err(e) => return plain(StatusCode::INTERNAL_SERVER_ERROR, &format!("讀不到檔案：{e}")),
+        Err(e) => {
+            log::warn!("擴充功能視窗要求 {uri}：讀不到檔案：{e}");
+            return plain(StatusCode::INTERNAL_SERVER_ERROR, &format!("讀不到檔案：{e}"));
+        }
     };
     let name = file
         .strip_prefix(crate::plugin::plugins_dir(app).unwrap_or_default())
@@ -193,6 +200,13 @@ fn serve(
     } else {
         bytes
     };
+    // A page that never loads leaves a blank window and no way to tell why, so
+    // the page itself is always recorded; its assets only when asked for.
+    if mime.starts_with("text/html") {
+        log::info!("擴充功能視窗載入 {uri}（{} 位元組）", body.len());
+    } else {
+        log::debug!("擴充功能視窗讀取 {uri}（{} 位元組）", body.len());
+    }
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", mime)
@@ -226,6 +240,26 @@ const BOOTSTRAP: &str = r##"<script>
     // loud one: the plugin's own log gets this line with the rest.
     console.error("擴充功能視窗拿不到應用的 IPC，這個視窗無法與擴充功能通訊。");
   }
+
+  // V3 ran these pages in Electron, where a throw reached the app's log. Here
+  // it would reach nobody, and a blank window with no reason in the log is the
+  // worst way for this host to fail, so both kinds of failure are forwarded:
+  // a script that did not load (capture phase, `error` on the element) and a
+  // script that threw.
+  window.addEventListener("error", function (event) {
+    var target = event && event.target;
+    if (target && target !== window && (target.src || target.href)) {
+      send("__page-error", "載入失敗：" + (target.src || target.href));
+      return;
+    }
+    var where = event && event.filename ? "（" + event.filename + ":" + event.lineno + "）" : "";
+    send("__page-error", String((event && event.message) || "未知錯誤") + where);
+  }, true);
+
+  window.addEventListener("unhandledrejection", function (event) {
+    var reason = event && event.reason;
+    send("__page-error", "未處理的 Promise：" + String((reason && reason.message) || reason));
+  });
 
   // Rust calls this to hand a message to the page (V3: webContents.send).
   window.__tremDispatch = function (channel, payload) {
@@ -462,9 +496,17 @@ fn open_folder(path: PathBuf, what: &str) {
 }
 
 // -- commands --------------------------------------------------------------
+//
+// Every one of these is `async` on purpose. A command declared without it is
+// run inline on the thread the IPC arrived on, which is the main thread, inside
+// WebView2's own message callback; `WebviewWindowBuilder::build` would then
+// create a window and a second WebView2 controller back inside that callback,
+// which is what made the app freeze solid the moment an extension opened its
+// window. `async` moves the body onto the async runtime, so the window is built
+// from the event loop the way any other window is.
 
 #[tauri::command]
-pub fn plugin_window_open(
+pub async fn plugin_window_open(
     app: tauri::AppHandle,
     plugin: String,
     page: String,
@@ -474,7 +516,7 @@ pub fn plugin_window_open(
 }
 
 #[tauri::command]
-pub fn plugin_window_close(app: tauri::AppHandle, plugin: String) -> Result<(), String> {
+pub async fn plugin_window_close(app: tauri::AppHandle, plugin: String) -> Result<(), String> {
     let label = window_label(&plugin);
     match app.get_webview_window(&label) {
         Some(window) => window
@@ -485,7 +527,7 @@ pub fn plugin_window_close(app: tauri::AppHandle, plugin: String) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn plugin_window_send(
+pub async fn plugin_window_send(
     app: tauri::AppHandle,
     plugin: String,
     channel: String,
@@ -495,7 +537,7 @@ pub fn plugin_window_send(
 }
 
 #[tauri::command]
-pub fn plugin_window_broadcast(
+pub async fn plugin_window_broadcast(
     app: tauri::AppHandle,
     plugin: String,
     channel: String,
@@ -505,7 +547,7 @@ pub fn plugin_window_broadcast(
 }
 
 #[tauri::command]
-pub fn plugin_window_list(app: tauri::AppHandle, plugin: Option<String>) -> Vec<WindowInfo> {
+pub async fn plugin_window_list(app: tauri::AppHandle, plugin: Option<String>) -> Vec<WindowInfo> {
     let mut out = Vec::new();
     for (label, window) in app.webview_windows() {
         let Some(name) = label.strip_prefix("plugin-") else {
@@ -531,7 +573,7 @@ pub fn plugin_window_list(app: tauri::AppHandle, plugin: Option<String>) -> Vec<
 /// extensions (`source` `"main"`) and a plugin window's own page
 /// (`source` `"plugin"`). V3 answered all of these in the main process.
 #[tauri::command]
-pub fn plugin_window_ipc(
+pub async fn plugin_window_ipc(
     app: tauri::AppHandle,
     plugin: String,
     channel: String,
@@ -541,6 +583,15 @@ pub fn plugin_window_ipc(
     let payload = payload.unwrap_or(Value::Null);
     let from_page = source.as_deref() == Some("plugin");
     match channel.as_str() {
+        // A page's own failures, forwarded by the bootstrap. V3 showed these in
+        // the app's log; without this a blank window says nothing at all.
+        "__page-error" => {
+            log::warn!(
+                "擴充功能視窗 {plugin}：{}",
+                payload.as_str().unwrap_or_default()
+            );
+            return Ok(());
+        }
         "open-plugin-window" => {
             let html = value_text(&payload, "htmlPath")
                 .ok_or_else(|| "open-plugin-window 缺少 htmlPath".to_string())?;
@@ -580,7 +631,7 @@ pub fn plugin_window_ipc(
                 .map(str::to_string)
                 .or_else(|| value_text(&payload, "windowId"))
                 .unwrap_or_else(|| plugin.clone());
-            return plugin_window_close(app, target);
+            return plugin_window_close(app, target).await;
         }
         "close-plugin-windows" => {
             let target = payload
@@ -588,7 +639,7 @@ pub fn plugin_window_ipc(
                 .map(str::to_string)
                 .or_else(|| value_text(&payload, "pluginId"))
                 .unwrap_or_else(|| plugin.clone());
-            return plugin_window_close(app, target);
+            return plugin_window_close(app, target).await;
         }
         "get-plugin-windows" => {
             let target = payload
@@ -596,7 +647,7 @@ pub fn plugin_window_ipc(
                 .map(str::to_string)
                 .or_else(|| value_text(&payload, "pluginId"))
                 .unwrap_or_else(|| plugin.clone());
-            let windows = plugin_window_list(app.clone(), Some(target.clone()));
+            let windows = plugin_window_list(app.clone(), Some(target.clone())).await;
             let _ = app.emit_to(
                 "main",
                 "plugin-windows-list",
@@ -634,7 +685,7 @@ pub fn plugin_window_ipc(
             if from_page {
                 // A plugin window has no tray to hide into; V3 hid the window
                 // and only `toggleFullscreen`/the nav could bring it back.
-                return plugin_window_close(app, plugin);
+                return plugin_window_close(app, plugin).await;
             }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
