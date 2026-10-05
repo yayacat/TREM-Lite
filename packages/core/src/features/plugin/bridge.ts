@@ -37,6 +37,23 @@ export async function readPlugins(): Promise<Map<string, Map<string, Uint8Array>
   );
 }
 
+/**
+ * The `.trem` archives sitting in the plugin folder, unopened.
+ *
+ * A user who finds the folder can copy a package into it instead of dragging
+ * one onto the settings page; the host installs what it finds at boot.
+ */
+export async function pluginPackages(): Promise<PluginFile[]> {
+  if (!inTauri) return [];
+  return invoke<PluginFile[]>("plugin_packages");
+}
+
+/** Delete one of those archives, once its contents are installed. */
+export async function discardPackage(name: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("plugin_discard", { name });
+}
+
 /** One file a plugin wrote, or `null` to delete it. */
 export async function writePluginFile(plugin: string, path: string, data: Uint8Array | null): Promise<void> {
   if (!inTauri) return;

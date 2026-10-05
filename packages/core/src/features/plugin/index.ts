@@ -11,11 +11,16 @@
  */
 import { createLogger } from "@/lib/logger";
 
+import { pluginStorageAvailable } from "./bridge";
 import { createPluginLoader } from "./host";
 
 const log = createLogger("plugin");
 
 export function initPlugins(): void {
+  // A browser tab has no plugin folder and no way to run what a plugin reaches
+  // for. 設定 → 擴充 says so rather than offering an install that cannot work.
+  if (!pluginStorageAvailable) return;
+
   const loader = createPluginLoader("index");
   loader.load().catch((e: unknown) => {
     log.error(`擴充功能載入失敗：${String(e)}`);
@@ -32,6 +37,8 @@ export function initPlugins(): void {
  * so a change made here takes effect the next time the app starts.
  */
 export function initPluginAdmin(): void {
+  if (!pluginStorageAvailable) return;
+
   const loader = createPluginLoader("index", { management: true });
   loader.scan().catch((e: unknown) => {
     log.error(`擴充功能清單讀取失敗：${String(e)}`);
@@ -39,6 +46,7 @@ export function initPluginAdmin(): void {
 }
 
 export { createPluginLoader, pluginLoader, PluginLoader, getSensitivityDescription } from "./host";
+export { pluginStorageAvailable } from "./bridge";
 export type { LoaderOptions, PluginContext } from "./host";
 export { MixinManager } from "./mixin";
 export { authorNames, localizedText } from "./types";

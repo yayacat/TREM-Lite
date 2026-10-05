@@ -14,7 +14,7 @@
  */
 import { FolderOpen, Puzzle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { authorNames, localizedText, pluginLoader } from "../plugin";
+import { authorNames, localizedText, pluginLoader, pluginStorageAvailable } from "../plugin";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
 import { createLogger } from "@/lib/logger";
@@ -53,11 +53,17 @@ export function ExtensionsTab() {
     return () => window.clearInterval(timer);
   }, [waitingFor]);
 
-  if (!loader) {
+  // A browser tab has no plugin folder: there is nowhere to install into and
+  // nothing to run. A missing loader on the desktop is only the moment before
+  // the list arrives — 設定 → 擴充 is a second webview and does read storage.
+  if (!pluginStorageAvailable || !loader) {
     return (
-      <Section title="擴充功能" note="擴充功能只能在桌面版執行。">
+      <Section
+        title="擴充功能"
+        note={pluginStorageAvailable ? "擴充功能清單尚未讀取完成。" : "擴充功能只能在桌面版執行。"}
+      >
         <Line label="目前環境">
-          <span className="settings-value">不支援</span>
+          <span className="settings-value">{pluginStorageAvailable ? "讀取中" : "不支援"}</span>
         </Line>
       </Section>
     );

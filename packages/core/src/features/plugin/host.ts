@@ -18,9 +18,12 @@ import { events } from "@/lib/events";
 import { createLogger } from "@/lib/logger";
 import type { TremEvents } from "@/lib/types";
 
+import { decodeBase64 } from "./base64";
 import {
+  discardPackage,
   installPlugin,
   pluginKeys,
+  pluginPackages,
   pluginRoot,
   pluginStorageAvailable,
   readPlugins,
@@ -312,6 +315,7 @@ export class PluginLoader {
     if (this.started) return;
     this.started = true;
 
+    await this.importPackages();
     await this.scan();
     const enabled = new Set(this.readEnabled());
 
@@ -525,6 +529,37 @@ export class PluginLoader {
   }
 
   // -- installing ----------------------------------------------------------
+
+  /**
+   * A `.trem` left in the plugin folder is an install waiting to happen.
+   *
+   * V3 shipped one that way — `index/plugin_init.js` copied a bundled package
+   * into the folder at boot — and anyone who opens the folder and copies a file
+   * into it expects the same. The archive is thrown away once it is in, so a
+   * package that installs is only ever installed once; one that fails stays
+   * where it is and says why in the log.
+   */
+  private async importPackages(): Promise<void> {
+    if (!pluginStorageAvailable) return;
+
+    let packages: PluginFile[];
+    try {
+      packages = await pluginPackages();
+    } catch (e) {
+      log.warn(`讀取擴充功能套件失敗：${String(e)}`);
+      return;
+    }
+
+    for (const pkg of packages) {
+      try {
+        const name = await this.installPackage(decodeBase64(pkg.data));
+        await discardPackage(pkg.path);
+        log.info(`已安裝擴充功能資料夾中的 ${pkg.path}（${name}）。`);
+      } catch (e) {
+        log.warn(`安裝 ${pkg.path} 失敗：${String(e)}`);
+      }
+    }
+  }
 
   /**
    * Install an unpacked plugin, replacing any previous copy.

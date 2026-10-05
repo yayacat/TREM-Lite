@@ -242,6 +242,59 @@ pub fn plugin_remove(app: tauri::AppHandle, plugin: String) -> Result<(), String
     Ok(())
 }
 
+/// `.trem` archives sitting in the plugin folder, base64, `path` = file name.
+///
+/// A user who opens the folder can copy a package into it instead of dragging
+/// one onto the settings page. The webview unzips what this returns; Rust only
+/// carries the bytes. See `PluginLoader::importPackages`.
+#[tauri::command]
+pub fn plugin_packages(app: tauri::AppHandle) -> Result<Vec<PluginFile>, String> {
+    let dir = plugins_dir(&app)?;
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
+        // `file_type()` rather than `path.is_file()`: a link out of the folder
+        // is not a package this host should read.
+        if !entry.file_type().map(|kind| kind.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("trem") {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|s| s.to_str()).map(str::to_owned) else {
+            continue;
+        };
+        match std::fs::read(&path) {
+            Ok(bytes) => out.push(PluginFile {
+                path: name,
+                data: base64::engine::general_purpose::STANDARD.encode(bytes),
+            }),
+            Err(e) => log::warn!(target: "plugin", "讀不到套件 {}：{e}", path.display()),
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+/// Delete one of those archives: it has been installed, and keeping it would
+/// install it again on the next start.
+///
+/// The name here is a file name (`demo.trem`), not a plugin name, so it is
+/// checked for path traversal instead of against `valid_name`.
+#[tauri::command]
+pub fn plugin_discard(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let target = plugins_dir(&app)?.join(safe_relative(&name)?);
+    if !target.is_file() {
+        return Ok(());
+    }
+    std::fs::remove_file(&target).map_err(|e| e.to_string())?;
+    log::info!(target: "plugin", "移除插件套件 {name}");
+    Ok(())
+}
+
 /// Keys published by organisations other than ExpTech, dropped in as `.pem`.
 #[tauri::command]
 pub fn plugin_keys(app: tauri::AppHandle) -> Result<Vec<PluginKey>, String> {

@@ -210,6 +210,8 @@ pub fn run() {
             plugin::plugin_write,
             plugin::plugin_install,
             plugin::plugin_remove,
+            plugin::plugin_packages,
+            plugin::plugin_discard,
             plugin::plugin_keys,
             updater::update_check,
             updater::update_pending,
