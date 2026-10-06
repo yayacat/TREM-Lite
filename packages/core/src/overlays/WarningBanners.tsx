@@ -1,11 +1,11 @@
 import { AlertTriangle, WifiOff } from "lucide-react";
 
 import { ui } from "@/lib/variable.ui";
-import { useRerenderOn } from "@/hooks/useTremEvent";
+import { useRerenderIf } from "@/hooks/useTremEvent";
 
 /** Top-right warning banners (ports warning-message-box): no-internet + unstable. */
 export function WarningBanners() {
-  useRerenderOn("DataRts", "InternetErrorChange");
+  useRerenderIf(() => `${ui.internetError}|${ui.unstable}`, "DataRts", "InternetErrorChange");
   if (!ui.internetError && !ui.unstable) return null;
 
   return (

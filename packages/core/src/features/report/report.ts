@@ -3,6 +3,7 @@
 // this module keeps the data fetching, map points, and lifecycle events.
 import { openUrl as openExternal } from "@tauri-apps/plugin-opener";
 
+import { idleMap } from "@/lib/config";
 import { REPORT_LIMIT, HTTP_TIMEOUT, SHOW_REPORT } from "@/lib/constants";
 import { HOST } from "@/lib/endpoints";
 import { events } from "@/lib/events";
@@ -11,11 +12,11 @@ import { fetchJson, http } from "@/lib/http";
 import { createLogger } from "@/lib/logger";
 import { now } from "@/lib/ntp";
 import { mark } from "@/lib/perf";
-import { variable } from "@/lib/variable";
+import { eventHoldsMap, variable } from "@/lib/variable";
 import type { ReportListItem } from "@/lib/types";
 import { inTauri } from "@/lib/env";
 
-import { updateMapBounds } from "@/features/focus/focus";
+import { isAutoFocusLocked, updateMapBounds } from "@/features/focus/focus";
 import { startReplay, stopReplay } from "@/features/replay/replay";
 
 let mapInitialized = false;
@@ -176,10 +177,51 @@ function initializeMapLayers() {
   });
 }
 
+/** The report object currently drawn. The same object every RTS frame is not redrawn. */
+let plottedReport: ReportListItem | null = null;
+/** Camera position the report was last fitted to. Empty while a fit is still moving. */
+let fittedAt = "";
+
+function cameraKey(): string {
+  const map = variable.map;
+  if (!map) return "";
+  const c = map.getCenter();
+  return `${map.getZoom().toFixed(4)}|${c.lng.toFixed(4)}|${c.lat.toFixed(4)}`;
+}
+
+/** Fit the report, unless the camera is already there or already on its way. */
+function fitReport(): void {
+  const map = variable.map;
+  if (!map || map.isMoving()) return;
+  const key = cameraKey();
+  if (key === fittedAt) return;
+  updateMapBounds(variable.cache.bounds.report as never);
+  fittedAt = map.isMoving() ? "" : cameraKey();
+}
+
+/** The report markers were cleared; the next showReportPoint must draw them again. */
+export function forgetReportPoint(): void {
+  plottedReport = null;
+  fittedAt = "";
+}
+
+/** A report is the one currently drawn. Used to skip clearing an empty source. */
+export function reportPointShown(): boolean {
+  return plottedReport !== null;
+}
+
 /** Plot a report's town-level intensity points + epicenter cross. */
 export function showReportPoint(data: ReportListItem | null): void {
   if (!data || !variable.map) return;
   const map = variable.map;
+
+  // Idle calls this on every station frame with the same report. The points
+  // are already on the map; fitting again is a no-op once the camera is there
+  // (see fitBounds), and rebuilding the features only to throw them away is not.
+  if (data === plottedReport) {
+    if (!isAutoFocusLocked()) fitReport();
+    return;
+  }
 
   const features: GeoJSON.Feature[] = [];
   variable.cache.bounds.report = [];
@@ -203,7 +245,9 @@ export function showReportPoint(data: ReportListItem | null): void {
     properties: { i: 0 },
   });
 
-  updateMapBounds(variable.cache.bounds.report as never);
+  plottedReport = data;
+  fittedAt = "";
+  fitReport();
   setFeatures(map, "report-markers-geojson", features);
 }
 
@@ -253,13 +297,15 @@ async function refresh() {
     // cache.last_report on first load WITHOUT emitting ReportRelease). Without
     // this, the idle RTS handler clears the live station dots and has no report
     // point to fall back to → a completely blank map ("沒有點").
+    // last_report 仍要留下，之後從「即時測站」切回「地震報告」才有得畫。
+    // 閒置選了即時測站時不畫上地圖；地震進行中仍畫，跟以前一樣。
     const newestVisibleReport = visibleReportList(list)[0];
     if (SHOW_REPORT && newestVisibleReport) {
       const detailEpoch = replayStateEpoch;
       const detail = await getReportById(newestVisibleReport.id);
       if (detail && detailEpoch === replayStateEpoch) {
         variable.cache.last_report = detail;
-        showReportPoint(detail); // no-op until the map is ready; DataRts re-plots
+        if (idleMap() === "report" || eventHoldsMap()) showReportPoint(detail);
       }
     }
     return;
@@ -320,7 +366,9 @@ function onReportRelease(ans: { data: ReportListItem; update?: boolean }) {
   updateOnShow = ans.update ? ans.data.id : null;
   if (SHOW_REPORT) {
     variable.cache.last_report = ans.data;
-    showReportPoint(ans.data);
+    // 閒置且改看即時測站時，新報告不蓋上地圖（列表照常）。
+    // 地震進行中仍畫，下一幀 RTS 會清掉，跟以前一樣。
+    if (idleMap() === "report" || eventHoldsMap()) showReportPoint(ans.data);
   }
   const data = ans.data;
   if (data.trem && Math.abs(data.trem - variable.cache.intensity.time) < 15000) {

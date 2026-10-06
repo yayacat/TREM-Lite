@@ -39,8 +39,10 @@ function describe(config: TremConfig): string {
 
 /** Mirrors src-tauri/default.yml — used as the browser-mode / fallback config. */
 export const DEFAULT_CONFIG: TremConfig = {
-  ver: 6,
+  ver: 7,
   "realtime-station-id": "1C10848",
+  /** No earthquake on the map: the latest report, as before this setting existed. */
+  "idle-map": "report",
   "check-box": {
     "show-window-eew": true,
     "show-window-report": true,
@@ -65,6 +67,21 @@ export const DEFAULT_CONFIG: TremConfig = {
 
 let cache: TremConfig | null = null;
 
+/**
+ * Old files predate `idle-map`. Anything other than the live-station choice
+ * stays on the report, which is what those files already showed. Not written
+ * back here — the next save persists it.
+ */
+function normalize(config: TremConfig): TremConfig {
+  if (config["idle-map"] !== "rts") config["idle-map"] = "report";
+  return config;
+}
+
+/** `idle-map`，缺了或不認得都當作地震報告。 */
+export function idleMap(config: TremConfig = getConfig()): TremConfig["idle-map"] {
+  return config["idle-map"] === "rts" ? "rts" : "report";
+}
+
 /** Load (and cache) the full config. */
 export async function loadConfig(force = false): Promise<TremConfig> {
   if (cache && !force) return cache;
@@ -73,7 +90,7 @@ export async function loadConfig(force = false): Promise<TremConfig> {
   if (!inTauri) {
     try {
       const saved = localStorage.getItem("trem.config");
-      cache = saved ? (JSON.parse(saved) as TremConfig) : structuredClone(DEFAULT_CONFIG);
+      cache = normalize(saved ? (JSON.parse(saved) as TremConfig) : structuredClone(DEFAULT_CONFIG));
       if (first) log.info(`載入設定（${saved ? "瀏覽器儲存" : "預設值"}）：${describe(cache)}`);
     } catch (e) {
       log.warn("瀏覽器裡的設定讀不出來，改用預設值：", e);
@@ -81,7 +98,7 @@ export async function loadConfig(force = false): Promise<TremConfig> {
     }
     return cache;
   }
-  cache = await invoke<TremConfig>("config_get");
+  cache = normalize(await invoke<TremConfig>("config_get"));
   if (first) log.info(`載入設定：${describe(cache)}`);
   return cache;
 }
@@ -92,32 +109,55 @@ export function getConfig(): TremConfig {
   return cache;
 }
 
+/** Browser has one window, so a write tells listeners here. Desktop uses Rust's `config-updated`. */
+const localListeners = new Set<(c: TremConfig) => void>();
+
+function notifyLocal(): void {
+  if (!cache) return;
+  for (const fn of localListeners) {
+    try {
+      fn(cache);
+    } catch (e) {
+      log.warn("設定變更的通知失敗：", e);
+    }
+  }
+}
+
 /** Persist the whole config. Broadcasts `config-updated` from Rust. */
 export async function writeConfig(config: TremConfig): Promise<void> {
-  const diff = changes(cache, config);
+  const next = normalize(config);
+  const diff = changes(cache, next);
   if (diff.length) log.info(`設定變更：${diff.join("；")}`);
-  cache = config;
+  cache = next;
   if (!inTauri) {
-    localStorage.setItem("trem.config", JSON.stringify(config));
+    localStorage.setItem("trem.config", JSON.stringify(cache));
+    if (diff.length) notifyLocal();
     return;
   }
-  await invoke("config_set", { value: config });
+  await invoke("config_set", { value: cache });
 }
 
 export async function resetConfig(): Promise<TremConfig> {
   if (!inTauri) {
     cache = structuredClone(DEFAULT_CONFIG);
     localStorage.setItem("trem.config", JSON.stringify(cache));
-  } else {
-    cache = await invoke<TremConfig>("config_reset");
+    log.info(`所有設定還原為預設值：${describe(cache)}`);
+    notifyLocal();
+    return cache;
   }
+  cache = normalize(await invoke<TremConfig>("config_reset"));
   log.info(`所有設定還原為預設值：${describe(cache)}`);
   return cache;
 }
 
 /** Re-read config whenever any window changes it. Returns an unlisten fn. */
 export async function onConfigUpdated(fn: (c: TremConfig) => void): Promise<() => void> {
-  if (!inTauri) return () => {};
+  if (!inTauri) {
+    localListeners.add(fn);
+    return () => {
+      localListeners.delete(fn);
+    };
+  }
   return listen("config-updated", async () => {
     const c = await loadConfig(true);
     fn(c);

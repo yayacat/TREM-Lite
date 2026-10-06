@@ -104,3 +104,19 @@ export const variable: TremVariable = {
     },
   },
 };
+
+/**
+ * An earthquake still holds the map: an EEW, the 15s after an RTS alert,
+ * an intensity or long-period overlay, or a replay.
+ *
+ * A missing RTS time is not that 15s tail — there is no alert frame to
+ * measure from. Callers that already have this frame's `rts.time` keep using
+ * that value themselves; this reads whatever the app last stored.
+ */
+export function eventHoldsMap(): boolean {
+  if (variable.cache.show_lpgm || variable.cache.show_intensity) return true;
+  if (variable.data.eew.length > 0) return true;
+  if (variable.play_mode == 2 || variable.play_mode == 3) return true;
+  const time = variable.data.rts?.time;
+  return time != null && time - variable.cache.last_rts_alert < 15000;
+}

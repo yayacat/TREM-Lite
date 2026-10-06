@@ -15,8 +15,6 @@
  *
  * The table below is color.json, one entry per 0.1 from −3.0 to 7.0.
  */
-import type { ExpressionSpecification } from "maplibre-gl";
-
 export const RTS_PALETTE: readonly string[] = [
   "#0000cd", "#0007d1", "#000ed6", "#0015da", "#001cdf", "#0024e3", "#002be7", "#0032ec",
   "#0039f0", "#0040f5", "#0048fa", "#0055ee", "#0063e3", "#0070d8", "#007ecd", "#008cc2",
@@ -33,17 +31,31 @@ export const RTS_PALETTE: readonly string[] = [
   "#c80000", "#c00000", "#b90000", "#b10000", "#aa0000",
 ];
 
-/** `circle-color` for a layer whose features carry the intensity as `i`. */
-export function rtsColor(): ExpressionSpecification {
-  const i = ["get", "i"];
-  const scale = [
-    "case",
-    ["<=", i, 0], -3,
-    ["<=", i, 1], ["+", -3, ["*", 3, i]],
-    ["/", ["*", 7, ["-", i, 1]], 6],
-  ];
-  // Integer tenths, so every stop compares exactly.
-  const tenth = ["round", ["*", scale, 10]];
-  const stops = RTS_PALETTE.slice(1).flatMap((color, n) => [n - 29, color]);
-  return ["step", tenth, RTS_PALETTE[0], ...stops] as unknown as ExpressionSpecification;
+/**
+ * MapLibre's `round`: half away from zero. `Math.round` rounds the other way
+ * on negatives, and the quiet half of this scale is negative.
+ */
+function roundHalfAway(n: number): number {
+  return n < 0 ? -Math.round(-n) : Math.round(n);
+}
+
+/**
+ * Index into {@link RTS_PALETTE} for a measured intensity.
+ *
+ * The same two steps the map used to run as a `circle-color` expression, done
+ * once per station instead of once per dot per redraw: move `i` onto the
+ * −3…7 scale, then round to a tenth. Every quiet station (`i` ≤ 0) lands on
+ * the same blue, so noise below 0 does not count as a new picture.
+ */
+export function rtsColorIndex(i: number): number {
+  const scale = i <= 0 ? -3 : i <= 1 ? -3 + 3 * i : (7 * (i - 1)) / 6;
+  const index = roundHalfAway(scale * 10) + 30;
+  if (index <= 0) return 0;
+  const last = RTS_PALETTE.length - 1;
+  return index >= last ? last : index;
+}
+
+/** The dot colour for `i`, the entry `rtsColorIndex` selects. */
+export function rtsDotColor(i: number): string {
+  return RTS_PALETTE[rtsColorIndex(i)];
 }

@@ -21,7 +21,7 @@ import type { Ans, EewData } from "@/lib/types";
 import { ui } from "@/lib/variable.ui";
 import { variable } from "@/lib/variable";
 
-import { createCircleFeature, waveCalculator, waveSource } from "./waves";
+import { createCircleFeature, ringStepKm, waveCalculator, waveSource } from "./waves";
 
 type CachedEew = EewData & { cacheTime: number };
 
@@ -83,7 +83,11 @@ function createEewLayer(ans: Ans<EewData>): void {
   startWaves();
 }
 
+/** The ring last sent to the map, so a sub-pixel step does not rebuild it. */
+const waveDrawn = new Map<string, { lon: number; lat: number; zoom: number; bg: boolean; p: number; s: number }>();
+
 function removeEewLayersAndSources(eewId: string): void {
+  waveDrawn.delete(eewId);
   const map = variable.map;
   if (!map) return;
   for (const layer of [`${eewId}-p-wave-outline`, `${eewId}-s-wave-outline`, `${eewId}-s-wave-background`]) {
@@ -107,16 +111,31 @@ function startWaves(): void {
     if (!calculator) return; // travel-time table still loading
     // 拖動地圖時不畫 S 波背景圈，避免拖動中閃爍（對應舊版 FocusManager.mouseDown()）。
     const bg = !mouseDown();
+    const zoom = Math.round(map.getZoom() * 1000) / 1000;
     for (const eew of variable.data.eew) {
       if (!map.getSource(waveSource(eew.id))) continue;
       const center: [number, number] = [eew.eq.lon, eew.eq.lat];
       const dist = calculator.psWaveDist(eew.eq.depth, eew.eq.time, now());
       eew.dist = dist;
-      const p = createCircleFeature(center, dist.p_dist);
-      const s = createCircleFeature(center, dist.s_dist);
+      const prev = waveDrawn.get(eew.id);
+      const step = ringStepKm(eew.eq.lat, zoom);
+      if (
+        prev &&
+        prev.bg === bg &&
+        prev.lon === center[0] &&
+        prev.lat === center[1] &&
+        prev.zoom === zoom &&
+        Math.abs(prev.p - dist.p_dist) < step &&
+        Math.abs(prev.s - dist.s_dist) < step
+      ) {
+        continue;
+      }
+      const p = createCircleFeature(center, dist.p_dist, zoom);
+      const s = createCircleFeature(center, dist.s_dist, zoom);
       p.properties = { ring: "p" };
       s.properties = { ring: "s", bg };
       replaceFeatures(map, waveSource(eew.id), [p, s]);
+      waveDrawn.set(eew.id, { lon: center[0], lat: center[1], zoom, bg, p: dist.p_dist, s: dist.s_dist });
     }
   }, 100);
 }
@@ -214,6 +233,8 @@ export function initEew(): void {
     removeEewLayersAndSources(ans.data.id);
     delete eew_cache[ans.data.id];
     show_eew(true);
+    // The blink timer may already have stopped (a cancelled EEW does not blink).
+    refresh_cross(false);
   });
 
   // Periodically drop expired EEW caches.

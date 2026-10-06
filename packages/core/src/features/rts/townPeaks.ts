@@ -33,12 +33,22 @@ export class TownPeaks {
     const peaks: TownLevel[] = [];
     for (const [key, town] of this.towns) {
       // `time <= now` also drops what a jump back in time left in the future.
-      town.samples = town.samples.filter((s) => s.time <= now && now - s.time < WINDOW_MS);
-      if (!town.samples.length) {
+      // One pass, in place: the window is at most a minute of one-second samples.
+      const samples = town.samples;
+      let kept = 0;
+      let max = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i];
+        if (s.time > now || now - s.time >= WINDOW_MS) continue;
+        samples[kept++] = s;
+        if (s.i > max) max = s.i;
+      }
+      samples.length = kept;
+      if (!kept) {
         this.towns.delete(key);
         continue;
       }
-      peaks.push({ code: town.code, i: Math.max(...town.samples.map((s) => s.i)) });
+      peaks.push({ code: town.code, i: max });
     }
     return peaks;
   }

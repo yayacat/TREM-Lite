@@ -86,8 +86,16 @@ export class EEWCalculator {
   }
 
   private findClosest(arr: number[], target: number): number {
-    return arr.reduce((prev, curr) =>
-      Math.abs(curr - target) < Math.abs(prev - target) ? curr : prev,
-    );
+    let best = arr[0];
+    let bestDiff = Math.abs(best - target);
+    for (let i = 1; i < arr.length; i++) {
+      const diff = Math.abs(arr[i] - target);
+      // Strictly closer, so a tie keeps the earlier depth, as reduce did.
+      if (diff < bestDiff) {
+        best = arr[i];
+        bestDiff = diff;
+      }
+    }
+    return best;
   }
 }

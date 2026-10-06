@@ -1,10 +1,16 @@
 import { IntensityBadge } from "@/components/IntensityBadge";
 import { ui } from "@/lib/variable.ui";
-import { useRerenderOn } from "@/hooks/useTremEvent";
+import { useRerenderIf } from "@/hooks/useTremEvent";
 
 /** "Your station" readout (from ui.currentStation + ui.rtsInfo): matches legacy .station-pga-wrapper. */
 export function StationReadout() {
-  useRerenderOn("DataRts");
+  useRerenderIf(() => {
+    const s = ui.currentStation;
+    const info = ui.rtsInfo;
+    return s
+      ? `${s.loc}|${s.i}|${s.rawI.toFixed(1)}|${s.pga.toFixed(2)}|${info.level}|${info.trigger}`
+      : `|${info.level}|${info.trigger}`;
+  }, "DataRts");
   const s = ui.currentStation;
 
   return (

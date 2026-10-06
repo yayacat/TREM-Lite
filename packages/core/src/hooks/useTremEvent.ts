@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { events, type TremEvents } from "@/lib/events";
 
@@ -23,6 +23,30 @@ export function useRerenderOn<K extends keyof TremEvents>(...types: K[]): void {
   const [, setN] = useState(0);
   useEffect(() => {
     const h = () => setN((n) => n + 1);
+    for (const t of types) events.on(t, h as never);
+    return () => {
+      for (const t of types) events.off(t, h as never);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [types.join("|")]);
+}
+
+/**
+ * Re-render on these events only when `signature` changes.
+ *
+ * `signature` must read module state (`ui`), not React props: the subscription
+ * keeps the first function, and that state is updated in place before the event.
+ */
+export function useRerenderIf<K extends keyof TremEvents>(signature: () => string, ...types: K[]): void {
+  const [, setN] = useState(0);
+  const sig = useRef("");
+  useEffect(() => {
+    const h = () => {
+      const next = signature();
+      if (next === sig.current) return;
+      sig.current = next;
+      setN((n) => n + 1);
+    };
     for (const t of types) events.on(t, h as never);
     return () => {
       for (const t of types) events.off(t, h as never);

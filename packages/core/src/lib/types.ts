@@ -76,11 +76,19 @@ export interface Ans<T = unknown> {
   [k: string]: unknown;
 }
 
+/** What the map shows while no earthquake holds it. */
+export type IdleMap = "report" | "rts";
+
 /** Config shape mirrors default.yml. */
 export interface TremConfig {
   ver: number;
   /** A hex device id of the rts.v1 station list. */
   "realtime-station-id": string;
+  /**
+   * Idle map. `report` plots the latest earthquake report (the historical
+   * default); `rts` keeps the live station dots and leaves the report off the map.
+   */
+  "idle-map": IdleMap;
   "check-box": Record<string, boolean>;
 }
 

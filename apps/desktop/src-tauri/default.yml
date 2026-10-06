@@ -1,6 +1,9 @@
-ver: 6
+ver: 7
 
 realtime-station-id: "1C10848"
+
+# No earthquake on the map: latest report (report) or live station dots (rts).
+idle-map: report
 
 check-box:
   show-window-eew: true

@@ -23,13 +23,17 @@ export interface ShakePoint {
   i: number;
 }
 
+/** Reused across frames. `shakeLevel` does not call itself. */
+const grid = new Map<number, number>();
+
 export function shakeLevel(points: Iterable<ShakePoint>): number {
-  const grid = new Map<string, number>();
+  grid.clear();
   for (const p of points) {
     if (Number.isNaN(p.i)) continue;
-    const cell = `${Math.floor(p.lon / CELL)},${Math.floor(p.lat / CELL)}`;
-    const strongest = grid.get(cell);
-    if (strongest === undefined || p.i > strongest) grid.set(cell, p.i);
+    // lat/0.05 stays well under 100000, so each cell has one key.
+    const key = Math.floor(p.lon / CELL) * 100000 + Math.floor(p.lat / CELL);
+    const strongest = grid.get(key);
+    if (strongest === undefined || p.i > strongest) grid.set(key, p.i);
   }
   let sum = 0;
   for (const i of grid.values()) {

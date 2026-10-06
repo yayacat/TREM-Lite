@@ -136,7 +136,7 @@ function refreshEqWaves(rts: RtsData, eqs: RtsEq[], show: boolean): void {
       const radius = calculator.psWaveDist(depth, origin * 1000, time).s_dist;
       // 0 until the S wave has left the hypocentre and reached the surface.
       if (!(radius > 0)) return;
-      const ring = createCircleFeature([lon, lat], radius);
+      const ring = createCircleFeature([lon, lat], radius, map?.getZoom() ?? 7);
       ring.properties = properties;
       rings.push(ring);
     });

@@ -1185,7 +1185,6 @@
 
 .legacy-status-light[data-state="ok"] .legacy-status-dot {
   background: #34c759;
-  animation: legacy-status-breathe 3s ease-in-out infinite;
 }
 
 .legacy-status-light[data-state="down"] .legacy-status-dot {
@@ -1200,22 +1199,6 @@
 
 .legacy-status-light[data-state="paused"] .legacy-status-dot {
   background: #8e8e93;
-}
-
-@keyframes legacy-status-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .legacy-status-light[data-state="ok"] .legacy-status-dot {
-    animation: none;
-  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1417,9 +1400,49 @@
   font-weight: 500;
 }
 
-.settings-toggle-row .settings-label {
+.settings-toggle-row .settings-label,
+.settings-select-row .settings-label {
   flex: 1;
   cursor: pointer;
+}
+
+.settings-select-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.settings-select {
+  min-width: 11.5em;
+  padding: 7px 32px 7px 10px;
+  border: 1px solid #ffffff1f;
+  border-radius: 8px;
+  color: #f4f4f5;
+  background: #1c1c1f;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  color-scheme: dark;
+}
+
+.settings-select:hover {
+  border-color: #ffffff38;
+}
+
+.settings-select:focus-visible {
+  outline: 2px solid #beff0c;
+  outline-offset: 2px;
+}
+
+.settings-select-wrap svg {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 15px;
+  height: 15px;
+  color: #a1a1aa;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .settings-preview {

@@ -5,7 +5,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable as disableAutostart, enable as enableAutostart } from "@tauri-apps/plugin-autostart";
 import { arch, type as osType, version as osVersion } from "@tauri-apps/plugin-os";
-import { BellRing, Copy, Download, FolderOpen, Info, Minus, Play, SlidersHorizontal, Volume2, X } from "lucide-react";
+import { BellRing, ChevronDown, Copy, Download, FolderOpen, Info, Minus, Play, SlidersHorizontal, Volume2, X } from "lucide-react";
 
 import { region, regionReady } from "@/domain/region";
 import { search_loc_name } from "@/domain/utils";
@@ -15,7 +15,7 @@ import { loadConfig, onConfigUpdated, resetConfig, writeConfig } from "@/lib/con
 import { AUDIO } from "@/lib/constants";
 import { inTauri } from "@/lib/env";
 import { exportLogs } from "@/lib/logStore";
-import type { Station, TremConfig } from "@/lib/types";
+import type { IdleMap, Station, TremConfig } from "@/lib/types";
 import { versionLabel } from "@/lib/version";
 
 import { StationPicker, type CityStations } from "./StationPicker";
@@ -23,8 +23,8 @@ import { StationPicker, type CityStations } from "./StationPicker";
 /**
  * The settings window. Four pages, each only what is used:
  *
- *   一般  the station shown on the map, starting with the system, the map's
- *         automatic zoom
+ *   一般  the station shown on the map, what an idle map shows, starting
+ *         with the system, the map's automatic zoom
  *   警報  which events bring the window forward, speech announcements
  *   音效  each sound effect, on or off
  *   關於  version and updates, data sources, links, and the reset
@@ -272,6 +272,16 @@ export function SettingsApp({ onClose }: { onClose?: () => void }) {
                 />
               </Group>
               <Group title="地圖">
+                <Select
+                  label="無地震時顯示"
+                  hint="沒有地震預警、檢知或震度速報時，地圖上預設看到的內容"
+                  value={config["idle-map"] === "rts" ? "rts" : "report"}
+                  options={[
+                    ["report", "地震報告"],
+                    ["rts", "即時測站（RTS）"],
+                  ]}
+                  onChange={(value) => save({ ...config, "idle-map": value })}
+                />
                 <Toggle
                   label="自動縮放到事件"
                   hint="有地震預警、檢知或報告時，地圖自動移到相關區域"
@@ -500,6 +510,48 @@ function stationsByPlace(stations: Record<string, Station>, chosen: string, regi
     });
     return towns.length ? [{ city, towns }] : [];
   });
+}
+
+function Select({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: IdleMap;
+  options: readonly (readonly [IdleMap, string])[];
+  onChange: (value: IdleMap) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="settings-row settings-select-row">
+      <label htmlFor={id} className="settings-label">
+        {label}
+        {hint && <small>{hint}</small>}
+      </label>
+      <div className="settings-select-wrap">
+        <select
+          id={id}
+          className="settings-select"
+          value={value}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (next === "report" || next === "rts") onChange(next);
+          }}
+        >
+          {options.map(([option, text]) => (
+            <option key={option} value={option}>
+              {text}
+            </option>
+          ))}
+        </select>
+        <ChevronDown aria-hidden />
+      </div>
+    </div>
+  );
 }
 
 function Toggle({

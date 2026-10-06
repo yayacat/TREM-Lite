@@ -94,6 +94,7 @@ export function initFocus(): void {
   events.on("DataRts", () =>
     queueMicrotask(() => {
       const stations = asCoords(variable.cache.bounds.rts);
+      if (!stations.length && !rtsKey) return;
       const key = stations.map((c) => `${c.lon},${c.lat}`).sort().join("|");
       if (key === rtsKey) return;
       rtsKey = key;

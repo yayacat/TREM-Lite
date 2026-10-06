@@ -1,10 +1,13 @@
 import { IntensityBadge } from "@/components/IntensityBadge";
 import { ui } from "@/lib/variable.ui";
-import { useRerenderOn } from "@/hooks/useTremEvent";
+import { useRerenderIf } from "@/hooks/useTremEvent";
 
 /** Left-side stacked max observed intensity + max PGA readout (from ui, set by the rts module). */
 export function MaxIntensity() {
-  useRerenderOn("DataRts");
+  useRerenderIf(
+    () => `${ui.maxIntensity.i}|${ui.maxPgaIntensity}|${ui.maxPga.toFixed(2)}`,
+    "DataRts",
+  );
   return (
     <div
       className="legacy-max-panel pointer-events-none absolute left-1 top-[164px] z-[1000] flex flex-col text-center text-[11px] font-medium"

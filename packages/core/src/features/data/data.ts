@@ -65,8 +65,7 @@ const pace = new LoopPace();
 const SLEEP_AFTER_MS = 3000;
 
 class DataManager {
-  private lastFetchTime = 0;
-  private fetchInterval: ReturnType<typeof setInterval> | null = null;
+  private fetchTimer: ReturnType<typeof setTimeout> | null = null;
   private mapInitialized = false;
   private sseActive = false;
   private sseManager: SseManager | null = null;
@@ -101,8 +100,8 @@ class DataManager {
     events.on("MapLoad", () => {
       if (this.mapInitialized) return;
       this.mapInitialized = true;
-      if (this.fetchInterval) clearInterval(this.fetchInterval);
-      this.fetchInterval = setInterval(() => void this.fetchData(), 100);
+      if (this.fetchTimer) clearTimeout(this.fetchTimer);
+      this.armFetch(0);
     });
 
     // Detect replay files under <appData>/replay.
@@ -135,10 +134,14 @@ class DataManager {
     }
   }
 
+  /** Run the loop once per pace.interval, instead of waking every 100 ms to check. */
+  private armFetch(delay: number): void {
+    if (this.fetchTimer) clearTimeout(this.fetchTimer);
+    this.fetchTimer = setTimeout(() => void this.fetchData(), delay);
+  }
+
   async fetchData(): Promise<void> {
-    const tick = performance.now();
-    if (tick - this.lastFetchTime < pace.interval) return;
-    this.lastFetchTime = tick;
+    this.armFetch(pace.interval);
 
     if (variable.play_mode === 0) {
       this.startSSE();
@@ -345,7 +348,6 @@ class DataManager {
     this.transportEpoch++;
     abortAll();
     this.stopSSE();
-    this.lastFetchTime = 0;
   }
 
   processEEWData(newData: EewData[] = []): void {
@@ -532,7 +534,7 @@ class DataManager {
 
 let manager: DataManager | null = null;
 
-/** Create the DataManager (idempotent). Wires MapLoad → 100ms fetch loop. */
+/** Create the DataManager (idempotent). Wires MapLoad → the data loop. */
 export function initData(): DataManager {
   if (!manager) manager = new DataManager();
   return manager;

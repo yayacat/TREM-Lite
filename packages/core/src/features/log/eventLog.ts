@@ -86,17 +86,26 @@ function stationPlace(id: string): string {
   return place ? `${place.city}${place.town}` : "?";
 }
 
-/** 一筆 RTS 的觸發狀況。 */
+/** 一筆 RTS 的觸發狀況。沒有警戒框時不掃全部測站。 */
 function rtsState(rts: RtsData) {
-  const stations = Object.entries(rts.station ?? {});
-  const alerted = stations.filter(([, s]) => s.alert);
+  const station = rts.station ?? {};
+  let count = 0;
   let maxI = -1;
   let maxPga = 0;
-  for (const [, s] of alerted) {
-    maxI = Math.max(maxI, s.i);
-    maxPga = Math.max(maxPga, s.pga);
+  const alerted: [string, (typeof station)[string]][] = [];
+  for (const id in station) {
+    count++;
+    const s = station[id];
+    if (!s.alert) continue;
+    alerted.push([id, s]);
+    if (s.i > maxI) maxI = s.i;
+    if (s.pga > maxPga) maxPga = s.pga;
   }
-  return { stations: stations.length, alerted, maxI, maxPga, boxes: Object.keys(rts.box ?? {}).length };
+  return { stations: count, alerted, maxI, maxPga, boxes: Object.keys(rts.box ?? {}).length };
+}
+
+function stationCount(rts: RtsData): number {
+  return Object.keys(rts.station ?? {}).length;
 }
 
 /** 每分鐘一行的 RTS 摘要，與觸發狀況改變時的一行。 */
@@ -111,6 +120,22 @@ function rtsLog() {
       return;
     }
     frames++;
+    const now = Date.now();
+    const summarize = now - windowStart >= 60_000;
+    // 平時沒有警戒框：不為了日誌把每個測站展開。摘要才數一次。
+    if (!rts.box || !Object.keys(rts.box).length) {
+      if (lastKey && !lastKey.startsWith("0|")) log.info("RTS 觸發結束，沒有測站在警戒中");
+      lastKey = "0|-1|0|0";
+      if (summarize) {
+        const lag = rts.time ? ((now - rts.time) / 1000).toFixed(1) : "?";
+        log.debug(
+          `RTS 近 ${Math.round((now - windowStart) / 1000)} 秒 ${frames} 筆｜回報測站 ${stationCount(rts)}｜觸發 0｜資料時間 ${when(rts.time)}（落後 ${lag} 秒）`,
+        );
+        frames = 0;
+        windowStart = now;
+      }
+      return;
+    }
     const s = rtsState(rts);
     const key = `${s.alerted.length}|${Math.round(s.maxI)}|${Math.round(s.maxPga)}|${s.boxes}`;
     if (key !== lastKey) {
@@ -128,8 +153,7 @@ function rtsLog() {
       }
       lastKey = key;
     }
-    const now = Date.now();
-    if (now - windowStart >= 60_000) {
+    if (summarize) {
       const lag = rts.time ? ((now - rts.time) / 1000).toFixed(1) : "?";
       log.debug(
         `RTS 近 ${Math.round((now - windowStart) / 1000)} 秒 ${frames} 筆｜回報測站 ${s.stations}｜觸發 ${s.alerted.length}｜資料時間 ${when(rts.time)}（落後 ${lag} 秒）`,

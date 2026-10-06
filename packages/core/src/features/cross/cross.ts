@@ -1,13 +1,11 @@
 // Ported from legacy/src/js/index/core/cross.js
-import { type ExpressionSpecification, type GeoJSONSource } from "maplibre-gl";
+import { type ExpressionSpecification } from "maplibre-gl";
 
 import { waveSource } from "@/features/eew/waves";
 import { COLOR } from "@/lib/constants";
 import { events } from "@/lib/events";
+import { setFeatures } from "@/lib/mapSource";
 import { variable } from "@/lib/variable";
-
-/** Whether the cross source currently holds (stale) features that need clearing. */
-let clean = false;
 
 interface CrossFeature {
   type: "Feature";
@@ -20,8 +18,6 @@ interface CrossFeature {
     opacity: number;
   };
 }
-
-type SetDataArg = Parameters<GeoJSONSource["setData"]>[0];
 
 /** EEW record shape, derived from the shared `variable` state contract. */
 type EewItem = (typeof variable.data.eew)[number];
@@ -84,58 +80,34 @@ export function refresh_cross(show: boolean): void {
   const markerFeatures: CrossFeature[] = [];
   const eew_list: EewItem[] = [];
 
-  if (!variable.data.eew?.length) {
-    if (clean) {
-      (map.getSource("cross-geojson") as GeoJSONSource | undefined)?.setData({
-        type: "FeatureCollection",
-        features: [],
-      } as unknown as SetDataArg);
-      clean = false;
-    }
-    return;
-  }
-
-  clean = true;
-
   for (const eew of variable.data.eew) {
     if (eew.status == 3 || map.getSource(waveSource(eew.id))) eew_list.push(eew);
   }
 
-  for (const eew of eew_list) {
-    if (eew.status == 3 || map.getSource(waveSource(eew.id))) {
-      const existingIndex = eew_list.findIndex((item) => item.id === eew.id);
-      let no = existingIndex;
-      if (eew_list.length > 1) {
-        no++;
-      }
+  eew_list.forEach((eew, index) => {
+    let no = index;
+    if (eew_list.length > 1) no++;
+    if (!(show || eew.status == 3)) return;
+    const opacity = eew.status == 3 ? 0.6 : 1;
+    markerFeatures.push({
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [eew.eq.lon, eew.eq.lat],
+      },
+      properties: {
+        no: no < 5 ? no : 0,
+        maxIntensity: eew.eq.max,
+        fillColor: COLOR.INTENSITY[eew.eq.max],
+        strokeColor: COLOR.INTENSITY_TEXT[eew.eq.max],
+        opacity,
+      },
+    });
+  });
 
-      if (show || eew.status == 3) {
-        const opacity = eew.status == 3 ? 0.6 : 1;
-        markerFeatures.push({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [eew.eq.lon, eew.eq.lat],
-          },
-          properties: {
-            no: no < 5 ? no : 0,
-            maxIntensity: eew.eq.max,
-            fillColor: COLOR.INTENSITY[eew.eq.max],
-            strokeColor: COLOR.INTENSITY_TEXT[eew.eq.max],
-            opacity: opacity,
-          },
-        });
-      }
-    }
-  }
+  setFeatures(map, "cross-geojson", markerFeatures as unknown as GeoJSON.Feature[]);
 
-  (map.getSource("cross-geojson") as GeoJSONSource | undefined)?.setData({
-    type: "FeatureCollection",
-    features: markerFeatures,
-  } as unknown as SetDataArg);
-
-  // Every moveLayer forces a style update and a full label placement, and this
-  // ran every 500 ms whether or not the order had changed. Moving it only when
-  // it is not already on top ends in the same order.
-  if (map.getLayersOrder().at(-1) !== "cross") map.moveLayer("cross");
+  // Every moveLayer forces a style update and a full label placement. An empty
+  // flash frame has nothing to order; a cross already on top is left there.
+  if (markerFeatures.length && map.getLayersOrder().at(-1) !== "cross") map.moveLayer("cross");
 }
