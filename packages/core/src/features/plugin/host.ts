@@ -414,6 +414,12 @@ export class PluginLoader {
       plugin: name,
       tree,
       pluginDir: `${PLUGIN_ROOT}/${name}`,
+      // A plugin that `require`s another by name gets *that* plugin's runtime,
+      // so the file it loads keeps its own folder and its own `fs`. Only
+      // plugins already running answer, which is what `dependencyOrder` above
+      // arranged; a name that is installed but disabled gets its own message
+      // rather than a silent `undefined`.
+      lookup: (other) => this.running.get(other)?.runtime,
       log: createLogger(`plugin:${name}`),
       onWrite: (path, data) => {
         void writePluginFile(name, path, data).catch((e: unknown) => {

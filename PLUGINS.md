@@ -176,8 +176,18 @@ const id = ctx.MixinManager.inject(SomeClass, "someMethod", function () {
 
 ```js
 const { helper } = ctx.require("./lib/helper");
-const other = ctx.require("../other-plugin/util"); // 另一個擴充功能
+const other = ctx.require("../other-plugin/util"); // 另一個擴充功能的路徑
 ```
+
+也可以直接用**另一個擴充功能的名稱**，會拿到它 `index.js` 匯出的東西 —— 這是不用打包工具就能共用程式碼的方式：
+
+```js
+const shared = require("other-plugin"); // 等同 require("../other-plugin/index.js")
+```
+
+兩個前提：那個擴充功能要**已安裝且已啟用**，而且要在自己的 `info.json` 的 `dependencies` 裡寫上它（見下節），確保它先載入。名稱只能是小寫字母、數字與連字號 —— `react-dom/client` 這種含 `/` 或 `.` 的寫法一律當成 npm 套件拒絕，不會被當成擴充功能名稱。
+
+被載入的檔案**以自己的身分執行**：它裡面的 `fs` 相對路徑、以及它寫入的檔案，都算在擁有那個檔案的擴充功能上，而不是呼叫它的那一個（寫到別的擴充功能仍然會被拒絕）。
 
 **可以**用：`path`、`fs`、`fs-extra`、`buffer`、`process`、`events`、`util`、`os`、`url`、`crypto`、`electron`。
 
@@ -189,7 +199,9 @@ const other = ctx.require("../other-plugin/util"); // 另一個擴充功能
 | `child_process` | 擴充功能不能啟動其他程式。 |
 | `worker_threads` | 擴充功能不能建立 worker。 |
 | `net` / `http` / `https` / `axios` | 擴充功能不能直接開 socket，請改用 `fetch`。 |
-| 其他 npm 套件 | 擴充功能不能載入 npm 套件，請改用相對路徑或 `ctx.require`。 |
+| 其他 npm 套件 | 擴充功能不能載入 npm 套件，請改用相對路徑，或另一個擴充功能的名稱。 |
+
+npm 套件要用就得在打包時自己 bundle 成一個 `.js` 放進擴充功能資料夾（例如 `esbuild --bundle --format=cjs`），執行時不會去 Node 的解析路徑裡找 `node_modules`。
 
 抓網路資料請用標準的 `fetch`，並以 `ctx.TREM.constant.URL` 取得官方端點。
 
@@ -274,7 +286,7 @@ if (focusButton) {
 
 條件不成立時擴充功能不會載入，設定頁會顯示原因。
 
-載入順序會依相依性排序，被依賴的會先載入。
+載入順序會依相依性排序，被依賴的會先載入。這也是 `require("other-plugin")` 能拿到東西的原因：寫了這一行，被依賴的那個就會排在你前面。反過來說，如果對方沒啟用、或你沒把它寫進 `dependencies`，`require` 會告訴你「尚未載入」而不是丟一個 `undefined` 給你。
 
 ## 敏感度
 
@@ -329,4 +341,4 @@ bun tool/plugin/selftest.ts
 - **沒有 Node 的網路模組**：`http`、`https`、`net` 都不可用，請用 `fetch`。
 - **`TREM.class` 只剩 `AudioManager`**：舊版還有 `DataManager`、`ReportManager`、`FocusManager`、`EewAreaManager`、`BoxManager`、`ReplayControler`、`WindowControler`，這些工作在 v4 由 Rust 與 `packages/core/src/features/` 負責，資料請從 `TREM.variable` 與事件取得。
 - **`ctx.info.name` 是新增的**：不用再從 `info.pluginDir` 推自己的名字。
-- **`require` 只認相對路徑與內建模組**：不會再去 Node 的解析路徑裡找套件。
+- **`require` 只認相對路徑、內建模組與其他擴充功能的名稱**：不會再去 Node 的解析路徑裡找套件，但 `require("other-plugin")` 可以直接用，不必寫成 `../other-plugin/index.js`。

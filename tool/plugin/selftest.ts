@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parsePackage, zipSync } from "../../packages/core/src/features/plugin/package.ts";
+import { PluginRuntime, PluginTree } from "../../packages/core/src/features/plugin/sandbox.ts";
 import { authorNames, localizedText } from "../../packages/core/src/features/plugin/types.ts";
 import { verifyPlugin } from "../../packages/core/src/features/plugin/verify.ts";
 import {
@@ -203,6 +204,71 @@ try {
     refused = String(e);
   }
   check("a bad plugin name is refused", refused.includes("name 不合格式"), refused);
+
+  // One extension standing on another. `require("other-plugin")` is a *name*,
+  // not a path, so it is the only specifier that has to reach out of the
+  // asking plugin's folder. Three things have to hold at once: the name finds
+  // that plugin's entry (`index.js`, the same file the host loads as the plugin
+  // itself), the loaded module keeps its own `fs` — relative paths and writes
+  // belong to its owner, not the asker — and a name that is installed but not
+  // running says so instead of vanishing.
+  const mountFiles = (entries: Record<string, string>) =>
+    new Map(Object.entries(entries).map(([path, value]) => [path, bytes(value)]));
+
+  const tree = new PluginTree();
+  tree.mount("lib-plugin", mountFiles({
+    "index.js": "module.exports = { tag: 'from-lib' };",
+    "util.js": `module.exports = { folder: () => require("path").basename(process.cwd()), save: () => require("fs").writeFileSync("note.txt", "hi") };`,
+  }));
+  tree.mount("consumer", mountFiles({ "index.js": "module.exports = {};" }));
+
+  const writes: string[] = [];
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const runtimeFor = (plugin: string, lookup: (name: string) => PluginRuntime | undefined) =>
+    new PluginRuntime({ plugin, tree, pluginDir: `/plugins/${plugin}`, lookup, log, onWrite: (path) => writes.push(`${plugin}:${path}`) });
+
+  const running = new Map<string, PluginRuntime>();
+  const lookup = (name: string) => running.get(name);
+  const lib = runtimeFor("lib-plugin", lookup);
+  running.set("lib-plugin", lib);
+  const consumer = runtimeFor("consumer", lookup);
+
+  const loaded = consumer.require("lib-plugin", "/plugins/consumer/index.js") as { tag?: string };
+  check("a bare name reaches another plugin's entry", loaded?.tag === "from-lib", JSON.stringify(loaded));
+  check("that module is the one the host loads", loaded === lib.loadEntry("index.js"));
+  check("that module is cached", consumer.require("lib-plugin", "/plugins/consumer/index.js") === loaded);
+
+  // The path form V3 documented — `../other-plugin/util` — crosses the same
+  // boundary, and so does a file the *consumer* reaches for inside it. Both
+  // have to run as the owner, or `fs` inside would resolve against the asker.
+  const foreign = consumer.require("../lib-plugin/util", "/plugins/consumer/index.js") as { folder: () => string; save: () => void };
+  check("a relative path into another plugin still works", typeof foreign?.folder === "function");
+  check("a module reached by path keeps its own folder", foreign.folder() === "lib-plugin", foreign.folder());
+  foreign.save();
+  check("its writes are attributed to its owner", writes.join(",") === "lib-plugin:note.txt", writes.join(","));
+
+  const off = new PluginTree();
+  off.mount("disabled", mountFiles({ "index.js": "module.exports = 1;" }));
+  const offRuntime = new PluginRuntime({
+    plugin: "consumer",
+    tree: off,
+    pluginDir: "/plugins/consumer",
+    lookup: () => undefined,
+    log,
+    onWrite() {},
+  });
+  const failure = (specifier: string) => {
+    try {
+      offRuntime.require(specifier, "/plugins/consumer/index.js");
+      return "";
+    } catch (e) {
+      return String(e);
+    }
+  };
+  check("a disabled plugin is named, not missed", failure("disabled").includes("尚未載入"), failure("disabled"));
+  check("the message says which key fixes it", failure("disabled").includes("dependencies"), failure("disabled"));
+  check("a package still says npm", failure("lodash").includes("npm 套件"), failure("lodash"));
+  check("a nested specifier is not a plugin name", failure("react-dom/client").includes("npm 套件"), failure("react-dom/client"));
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

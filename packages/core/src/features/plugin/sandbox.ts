@@ -12,7 +12,9 @@
  *
  * Deliberately absent: any path outside `/plugins`, `child_process` and npm
  * packages. A plugin that reaches for one gets a named error rather than a
- * confusing `undefined`. `electron` is not absent: `ipcRenderer` is what every
+ * confusing `undefined` — and a *bare* specifier is not a package but another
+ * extension's folder, which is what makes `require("other-plugin")` work.
+ * `electron` is not absent: `ipcRenderer` is what every
  * extension that has a window of its own starts with, and `electron.ts` answers
  * it with the host's own windows.
  */
@@ -251,6 +253,16 @@ export interface RuntimeOptions {
    * reports it — `ctx.info.pluginDir` stays the *root*, as it was in V3.
    */
   pluginDir?: string;
+  /**
+   * The runtime of another plugin, for `require("<plugin-name>")`.
+   *
+   * A module has to be evaluated by the runtime that owns its folder: `fs`
+   * resolves relative paths against `pluginDir` and writes are attributed to
+   * `plugin`, so evaluating one plugin's file with another's runtime would
+   * hand it the wrong directory. The loader answers this from the plugins it
+   * has running, which is also why a plugin reached by name must be enabled.
+   */
+  lookup?: (plugin: string) => PluginRuntime | undefined;
 }
 
 /**
@@ -448,9 +460,20 @@ export class PluginRuntime {
     if (name in UNSUPPORTED) throw new Error(UNSUPPORTED[name]);
 
     if (!isAbsolute(specifier) && !specifier.startsWith(".")) {
-      // V3 fell through to Node's `require`, which resolved from core/ — i.e.
-      // never. Saying so beats an empty module.
-      throw new Error(`Cannot find module '${specifier}'：擴充功能不能載入 npm 套件，請改用相對路徑或 ctx.require。`);
+      // One extension standing on another: the tree holds every installed
+      // plugin, so a bare name is that plugin's own folder. `dependencies`
+      // already ordered the two, and asking for an absent one happens when a
+      // plugin reaches for a package, so say both halves.
+      if (this.isBareName(specifier)) {
+        const root = join(PLUGIN_ROOT, specifier);
+        if (this.tree.isDirectory(root)) {
+          // `index.js`, because that is the file the host loads as the plugin
+          // itself — anything else would hand the asker a module the host never
+          // treated as that plugin.
+          return this.evaluate(`${root}/index.js`);
+        }
+      }
+      throw new Error(`Cannot find module '${specifier}'：擴充功能不能載入 npm 套件，請改用相對路徑，或另一個擴充功能的名稱。`);
     }
 
     const base = isAbsolute(specifier) ? normalize(specifier) : resolve(dirname(from), specifier);
@@ -460,7 +483,27 @@ export class PluginRuntime {
     throw new Error(`Cannot find module '${specifier}' from ${from}`);
   }
 
+  /** A plugin name is a bare specifier only if it could name a directory. */
+  private isBareName(specifier: string): boolean {
+    return /^[a-z0-9][a-z0-9-]*$/.test(specifier);
+  }
+
   private evaluate(file: string): unknown {
+    // A file in another plugin's folder — reached by name, or by the
+    // `../other-plugin/util` path V3 documented — has to run under *its* owner's
+    // runtime. Otherwise the `fs` inside it resolves relative paths against the
+    // plugin that happened to ask, and a write would be attributed there too.
+    // No owner means nothing loaded that plugin yet, which is a message about
+    // `dependencies`, not a missing file: the folder is right there.
+    const owner = this.ownName(file);
+    if (owner !== this.options.plugin) {
+      const other = this.options.lookup?.(owner);
+      if (!other) {
+        throw new Error(`擴充功能「${owner}」尚未載入，請在 info.json 的 dependencies 加入 ${owner}，讓它先載入。`);
+      }
+      return other.evaluate(file);
+    }
+
     const cached = this.modules.get(file);
     if (cached) return cached.exports;
 
